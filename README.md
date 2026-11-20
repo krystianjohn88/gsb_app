@@ -6,7 +6,7 @@ cały szlak albo wybrany region, w obu kierunkach.
 - **GSB** – Główny Szlak Beskidzki (Ustroń ↔ Wołosate)
 - **MSB** – Mały Szlak Beskidzki (Bielsko-Biała ↔ Luboń Wielki)
 - **NSK** – Niebieski Szlak Karpacki (Grybów ↔ Rzeszów)
-- **TWR** – „Błękitny Rogacz”, niebieski szlak Tarnów ↔ Wielki Rogacz
+- **TWR** – Niebieski szlak turystyczny Tarnów – Wielki Rogacz
 
 Czysty JS, zero zależności npm. Serwer: `server.js` (Node 22), frontend: `public/`
 (ten sam co w statycznej wersji [longMountainPath](https://github.com/krystianjohn88/longMountainPath)).
