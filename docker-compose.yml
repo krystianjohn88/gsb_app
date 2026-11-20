@@ -1,0 +1,12 @@
+services:
+  gsb:
+    build: .
+    container_name: gsb_app
+    ports:
+      - "3000:3000"
+    volumes:
+      # Baza w JSON-ie leży obok – edytujesz plik, odświeżasz stronę.
+      - ./data:/app/data:ro
+      # Podczas developmentu frontend też z dysku (bez przebudowy obrazu).
+      - ./public:/app/public:ro
+    restart: unless-stopped
