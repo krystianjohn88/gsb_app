@@ -1,4 +1,4 @@
-# Szlaki długodystansowe Beskidów (GSB, MSB, NSK)
+# Szlaki długodystansowe Beskidów (GSB, MSB, NSK, TWR)
 
 Aplikacja na telefon (PWA) do nauki kolejnych punktów szlaków: wpisujesz po kolei nazwy punktów –
 cały szlak albo wybrany region, w obu kierunkach.
@@ -6,6 +6,7 @@ cały szlak albo wybrany region, w obu kierunkach.
 - **GSB** – Główny Szlak Beskidzki (Ustroń ↔ Wołosate)
 - **MSB** – Mały Szlak Beskidzki (Bielsko-Biała ↔ Luboń Wielki)
 - **NSK** – Niebieski Szlak Karpacki (Grybów ↔ Rzeszów)
+- **TWR** – „Błękitny Rogacz”, niebieski szlak Tarnów ↔ Wielki Rogacz
 
 Czysty JS, zero zależności npm. Serwer: `server.js` (Node 22), frontend: `public/`
 (ten sam co w statycznej wersji [longMountainPath](https://github.com/krystianjohn88/longMountainPath)).
@@ -23,7 +24,7 @@ Bez Dockera: `node server.js`.
 ## Baza danych – `data/`
 
 - `trails.json` – lista szlaków: `id`, `name`, `short`, `color` (kolor znakowania), `file`
-- `gsb.json`, `msb.json`, `nsk.json` – punkty szlaku w kolejności (wg `id`):
+- `gsb.json`, `msb.json`, `nsk.json`, `twr.json` – punkty szlaku w kolejności (wg `id`):
 
 ```json
 { "id": 1, "name_mountain_part": "Beskid Niski", "label": "Chełm", "typ_punktu": "góra", "height": 778 }
