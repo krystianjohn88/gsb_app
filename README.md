@@ -1,9 +1,13 @@
-# GSB – nauka trasy
+# Szlaki długodystansowe Beskidów (GSB, NSK)
 
-Aplikacja na telefon (PWA) do nauki kolejnych punktów Głównego Szlaku Beskidzkiego:
-wpisujesz po kolei nazwy punktów – cały szlak od początku albo wybrane pasmo.
+Aplikacja na telefon (PWA) do nauki kolejnych punktów szlaków: wpisujesz po kolei nazwy punktów –
+cały szlak albo wybrany region, w obu kierunkach.
 
-Czysty JS, zero zależności npm. Serwer: `server.js` (Node 22), frontend: `public/`.
+- **GSB** – Główny Szlak Beskidzki (Ustroń ↔ Wołosate)
+- **NSK** – Niebieski Szlak Karpacki (Grybów ↔ Rzeszów)
+
+Czysty JS, zero zależności npm. Serwer: `server.js` (Node 22), frontend: `public/`
+(ten sam co w statycznej wersji [longMountainPath](https://github.com/krystianjohn88/longMountainPath)).
 
 ## Uruchomienie
 
@@ -15,29 +19,31 @@ Potem http://localhost:3000 (na telefonie w tej samej sieci: `http://<IP-kompute
 
 Bez Dockera: `node server.js`.
 
-## Baza danych – `data/points.json`
+## Baza danych – `data/`
 
-Tablica punktów w kolejności szlaku (Ustroń → Wołosate, wg `id`):
+- `trails.json` – lista szlaków: `id`, `name`, `short`, `color` (kolor znakowania), `file`
+- `gsb.json`, `nsk.json` – punkty szlaku w kolejności (wg `id`):
 
 ```json
-{
-  "id": 1,
-  "name_mountain_part": "Beskid Śląski",
-  "label": "Ustroń",
-  "typ_punktu": "miasto"
-}
+{ "id": 1, "name_mountain_part": "Beskid Niski", "label": "Chełm", "typ_punktu": "góra", "height": 778 }
 ```
 
 `typ_punktu`: `góra` | `przełęcz` | `schronisko` | `miasto` | `polana` | `inne`.
+`height` (m n.p.m.) jest opcjonalne – pokazuje się w podpowiedzi.
 
-Nazwa z dopiskiem w nawiasie, np. `Chatka Puchatka (Hasiakowa Skała)`, zaliczana jest w całości,
-bez nawiasu albo samym dopiskiem. Przedrostki „Przełęcz”, „Hala”, „Schronisko” można pominąć.
+Folder jest podmontowany do kontenera i czytany przy każdym żądaniu – po edycji wystarczy odświeżyć stronę.
 
-Plik jest podmontowany do kontenera i czytany przy każdym żądaniu – po edycji wystarczy odświeżyć stronę.
-Dane: 184 punkty GSB od Ustronia do Wołosatego.
+## Sprawdzanie odpowiedzi
+
+Nie liczą się polskie znaki, wielkość liter ani myślniki. Przedrostki „Przełęcz”, „Hala”, „Schronisko PTTK”,
+„Stacja Turystyczna” można pominąć, a nazwę z dopiskiem w nawiasie można wpisać bez nawiasu albo samym dopiskiem.
+
+**Zgodność odpowiedzi:** aplikacja liczy, w ilu procentach wpisana nazwa zgadza się z poprawną (odległość Levenshteina)
+i pokazuje ten wynik. Odpowiedź jest zaliczana od 80% – próg można zmienić suwakiem na ekranie startowym.
 
 ## API
 
-- `GET /api/points` – wszystkie punkty, posortowane po `id`
-- `GET /api/points?part=Gorce` – punkty jednego pasma
-- `GET /api/parts` – pasma w kolejności szlaku z liczbą punktów
+- `GET /data/<plik>.json` – pliki z `data/` (z nich korzysta frontend)
+- `GET /api/trails` – lista szlaków
+- `GET /api/points?trail=nsk` – punkty szlaku (domyślnie pierwszy z `trails.json`), opcjonalnie `&part=Bieszczady`
+- `GET /api/parts?trail=nsk` – regiony w kolejności szlaku z liczbą punktów

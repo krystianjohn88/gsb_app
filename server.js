@@ -1,12 +1,12 @@
 // Prosty serwer HTTP bez zależności: serwuje frontend z ./public
-// oraz „bazę danych” z pliku JSON (./data/points.json).
+// oraz „bazę danych” z plików JSON w ./data (trails.json + plik punktów każdego szlaku).
 const http = require('node:http');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'points.json');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -24,32 +24,52 @@ function send(res, status, body, type = 'text/plain; charset=utf-8') {
   res.end(body);
 }
 
-// Plik czytany przy każdym żądaniu – edycja JSON-a działa bez restartu kontenera.
-async function readPoints() {
-  const raw = await fs.readFile(DATA_FILE, 'utf8');
-  const points = JSON.parse(raw);
-  if (!Array.isArray(points)) throw new Error('points.json musi zawierać tablicę');
-  return points.sort((a, b) => a.id - b.id);
+const sendJson = (res, status, data) => send(res, status, JSON.stringify(data), MIME['.json']);
+
+// Pliki czytane przy każdym żądaniu – edycja JSON-a działa bez restartu kontenera.
+async function readJson(file) {
+  return JSON.parse(await fs.readFile(path.join(DATA_DIR, file), 'utf8'));
 }
 
-async function handleApi(req, res, url) {
+async function readPoints(trailId) {
+  const trails = await readJson('trails.json');
+  const trail = trailId ? trails.find((t) => t.id === trailId) : trails[0];
+  if (!trail) return null;
+  return (await readJson(trail.file)).sort((a, b) => a.id - b.id);
+}
+
+async function handleApi(res, url) {
+  if (url.pathname === '/api/trails') return sendJson(res, 200, await readJson('trails.json'));
+
+  const points = await readPoints(url.searchParams.get('trail'));
+  if (!points) return sendJson(res, 404, { error: 'Nieznany szlak' });
+
   if (url.pathname === '/api/points') {
-    let points = await readPoints();
     const part = url.searchParams.get('part');
-    if (part) points = points.filter((p) => p.name_mountain_part === part);
-    return send(res, 200, JSON.stringify(points), MIME['.json']);
+    return sendJson(res, 200, part ? points.filter((p) => p.name_mountain_part === part) : points);
   }
   if (url.pathname === '/api/parts') {
     // Pasma w kolejności występowania na szlaku + liczba punktów.
     const parts = [];
-    for (const p of await readPoints()) {
-      const last = parts[parts.length - 1];
-      if (last && last.name === p.name_mountain_part) last.count++;
+    for (const p of points) {
+      const known = parts.find((x) => x.name === p.name_mountain_part);
+      if (known) known.count++;
       else parts.push({ name: p.name_mountain_part, count: 1 });
     }
-    return send(res, 200, JSON.stringify(parts), MIME['.json']);
+    return sendJson(res, 200, parts);
   }
-  return send(res, 404, JSON.stringify({ error: 'Not found' }), MIME['.json']);
+  return sendJson(res, 404, { error: 'Not found' });
+}
+
+// GET /data/<plik>.json – te same pliki, które w wersji statycznej leżą obok strony.
+async function handleData(res, pathname) {
+  const name = path.basename(decodeURIComponent(pathname));
+  if (!name.endsWith('.json')) return send(res, 404, 'Not found');
+  try {
+    send(res, 200, await fs.readFile(path.join(DATA_DIR, name)), MIME['.json']);
+  } catch {
+    send(res, 404, 'Not found');
+  }
 }
 
 async function handleStatic(res, pathname) {
@@ -69,11 +89,12 @@ http
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     try {
       if (req.method !== 'GET') return send(res, 405, 'Method not allowed');
-      if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
+      if (url.pathname.startsWith('/api/')) return await handleApi(res, url);
+      if (url.pathname.startsWith('/data/')) return await handleData(res, url.pathname);
       return await handleStatic(res, url.pathname);
     } catch (err) {
       console.error(err);
-      send(res, 500, JSON.stringify({ error: err.message }), MIME['.json']);
+      sendJson(res, 500, { error: err.message });
     }
   })
-  .listen(PORT, () => console.log(`GSB app: http://localhost:${PORT}`));
+  .listen(PORT, () => console.log(`Szlaki długodystansowe Beskidów: http://localhost:${PORT}`));

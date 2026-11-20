@@ -1,7 +1,7 @@
 {
-  "name": "GSB – nauka trasy",
-  "short_name": "GSB",
-  "start_url": "/",
+  "name": "Szlaki długodystansowe Beskidów",
+  "short_name": "Szlaki Beskidów",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#f4f1ea",
   "theme_color": "#1f5130",
