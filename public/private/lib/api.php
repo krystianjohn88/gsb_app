@@ -143,7 +143,41 @@ function point_out(array $p): array
         'height' => $p['height'] === null ? null : (int) $p['height'],
         'difficulty' => $p['difficulty'],
         'map_url' => $p['map_url'] ?? null,
+        'lat' => isset($p['lat']) ? (float) $p['lat'] : null,
+        'lon' => isset($p['lon']) ? (float) $p['lon'] : null,
     ];
+}
+
+// Opcjonalne współrzędne punktu z pola „coords”. Przyjmuje m.in. format z mapy.com
+// („49.7211110N, 18.8156131E”), zwykły „49.72111, 18.81561” i przecinki dziesiętne („49,72111 18,81561”).
+// Zwraca [lat, lon] albo [null, null] dla pustego pola.
+function coords_field(array $b): array
+{
+    $v = isset($b['coords']) ? trim((string) $b['coords']) : '';
+    if ($v === '') {
+        return [null, null];
+    }
+    if (!preg_match_all('/(-?\d{1,3}(?:[.,]\d+)?)\s*°?\s*([NSEWnsew])?/u', $v, $m, PREG_SET_ORDER) || count($m) < 2) {
+        fail(422, 'Współrzędne: podaj szerokość i długość, np. 49.72111, 18.81561 (albo 49.72111N, 18.81561E).');
+    }
+    $lat = null;
+    $lon = null;
+    foreach (array_slice($m, 0, 2) as $i => $hit) {
+        $num = (float) str_replace(',', '.', $hit[1]);
+        $dir = strtoupper($hit[2] ?? '');
+        if ($dir === 'S' || $dir === 'W') {
+            $num = -abs($num);
+        }
+        if ($dir === 'E' || $dir === 'W' || ($dir === '' && $i === 1)) {
+            $lon = $num;
+        } else {
+            $lat = $num;
+        }
+    }
+    if ($lat === null || $lon === null || abs($lat) > 90 || abs($lon) > 180) {
+        fail(422, 'Nieprawidłowe współrzędne – szerokość od -90 do 90, długość od -180 do 180.');
+    }
+    return [round($lat, 7), round($lon, 7)];
 }
 
 // Opcjonalny link do mapy: tylko https i tylko mapy.com / mapy.cz.
@@ -184,6 +218,7 @@ function point_fields(array $b): array
         'height' => height_field($b),
         'difficulty' => enum_field($b, 'difficulty', DIFFICULTIES),
         'map_url' => map_url_field($b),
+        'coords' => coords_field($b),
     ];
 }
 
@@ -212,9 +247,10 @@ function create_point(array $user, array $b): array
     $pdo->prepare('UPDATE points SET position = position + 1 WHERE trail_id = ? AND position >= ?')
         ->execute([$trail, $pos]);
     $pdo->prepare(
-        'INSERT INTO points (trail_id, position, region, label, type, height, difficulty, map_url, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    )->execute([$trail, $pos, $f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'], $f['map_url'], $user['id']]);
+        'INSERT INTO points (trail_id, position, region, label, type, height, difficulty, map_url, lat, lon, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    )->execute([$trail, $pos, $f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'], $f['map_url'],
+        $f['coords'][0], $f['coords'][1], $user['id']]);
     return point_out(find_point((int) $pdo->lastInsertId()));
 }
 
@@ -224,8 +260,10 @@ function update_point(array $user, array $b): array
     find_point($id);
     $f = point_fields($b);
     db()->prepare(
-        'UPDATE points SET region = ?, label = ?, type = ?, height = ?, difficulty = ?, map_url = ?, updated_by = ? WHERE id = ?'
-    )->execute([$f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'], $f['map_url'], $user['id'], $id]);
+        'UPDATE points SET region = ?, label = ?, type = ?, height = ?, difficulty = ?, map_url = ?, lat = ?, lon = ?,
+         updated_by = ? WHERE id = ?'
+    )->execute([$f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'], $f['map_url'],
+        $f['coords'][0], $f['coords'][1], $user['id'], $id]);
     return point_out(find_point($id));
 }
 

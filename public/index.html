@@ -125,6 +125,11 @@
         <input id="edit-map" type="url" maxlength="500" inputmode="url" autocapitalize="none" spellcheck="false"
                placeholder="https://mapy.com/pl/turisticka?…">
       </label>
+      <label>Współrzędne punktu – opcjonalnie (dokładne położenie znacznika)
+        <input id="edit-coords" maxlength="60" inputmode="text" autocapitalize="none" spellcheck="false"
+               placeholder="49.72111N, 18.81561E">
+        <small class="muted">Na mapy.com: kliknij punkt → „Współrzędne” → skopiuj i wklej tutaj.</small>
+      </label>
       <p id="edit-message" class="feedback" aria-live="polite"></p>
       <button class="btn primary big" type="submit">💾 Zapisz</button>
       <div class="actions edit-existing">
@@ -319,6 +324,6 @@
     <a id="map-open" class="btn primary map-open" href="#" target="_blank" rel="noopener">Otwórz w mapy.com ↗</a>
   </dialog>
 
-  <script src="app.js?v=19"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>

@@ -370,7 +370,10 @@ function coordsFromMapUrl(url) {
 async function openMapDialog(p) {
   const url = safeMapUrl(p.map_url);
   if (!url) return;
-  const c = coordsFromMapUrl(url);
+  // Dokładne współrzędne punktu (jeśli wpisane) mają pierwszeństwo przed środkiem widoku z linku mapy.com.
+  const view = coordsFromMapUrl(url);
+  const exact = Number.isFinite(p.lat) && Number.isFinite(p.lon);
+  const c = exact ? { lat: p.lat, lon: p.lon, zoom: view ? view.zoom : 15 } : view;
   if (!c) {
     // Link bez współrzędnych (np. krótki link) – od razu na mapy.com.
     window.open(url, '_blank', 'noopener');
@@ -388,7 +391,8 @@ async function openMapDialog(p) {
     $('map-status').textContent = `✗ ${err.message} Otwórz punkt w mapy.com.`;
     return;
   }
-  $('map-status').textContent = '';
+  $('map-status').textContent = exact ? ''
+    : 'Położenie przybliżone (środek widoku z linku mapy.com) – dokładne współrzędne można dodać w edytorze punktu.';
   if (!pointMap) {
     pointMap = L.map('map-box', { zoomControl: true });
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -852,6 +856,8 @@ function openEditor(point, { afterId = null, insertAt = null, region = null } = 
   $('edit-height').value = isNew || point.height == null ? '' : point.height;
   fillSelect($('edit-difficulty'), DIFFICULTIES, isNew ? 'łatwy' : (point.difficulty || 'łatwy'));
   $('edit-map').value = isNew ? '' : (point.map_url || '');
+  $('edit-coords').value = !isNew && Number.isFinite(point.lat) && Number.isFinite(point.lon)
+    ? `${point.lat}, ${point.lon}` : '';
   document.querySelectorAll('.edit-existing').forEach((el) => { el.hidden = isNew; });
   setEditMessage('', '');
   show('edit');
@@ -872,6 +878,7 @@ function editFormData() {
     height: $('edit-height').value,
     difficulty: $('edit-difficulty').value,
     map_url: $('edit-map').value.trim(),
+    coords: $('edit-coords').value.trim(),
   };
 }
 
