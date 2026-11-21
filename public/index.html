@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=22">
+  <link rel="stylesheet" href="styles.css?v=24">
 </head>
 <body>
   <!-- Ekran startowy: wybór zakresu nauki -->
@@ -24,7 +24,10 @@
     <div id="trails" class="trails" role="group" aria-label="Szlak"></div>
 
     <header class="hero">
-      <h1 id="trail-short">…</h1>
+      <div class="hero-title">
+        <h1 id="trail-short">…</h1>
+        <button id="trail-info-btn" class="info-btn" type="button" aria-label="Informacje o szlaku" hidden>ℹ️</button>
+      </div>
       <p id="trail-name"></p>
     </header>
 
@@ -346,6 +349,20 @@
     <button id="home" class="btn big" type="button">Menu</button>
   </section>
 
+  <!-- Okienko z informacjami o szlaku (ℹ️ przy nazwie szlaku) -->
+  <dialog id="trail-dialog" class="map-dialog info-dialog" aria-labelledby="trail-info-title">
+    <div class="map-head">
+      <div class="bar-title">
+        <strong id="trail-info-title"></strong>
+        <span id="trail-info-sub"></span>
+      </div>
+      <button id="trail-info-close" class="icon-btn" type="button" aria-label="Zamknij">✕</button>
+    </div>
+    <dl id="trail-info-facts" class="trail-facts"></dl>
+    <div id="trail-info-desc" class="trail-desc"></div>
+    <a id="trail-info-map" class="btn primary map-open" href="#" target="_blank" rel="noopener" hidden>🗺️ Mapa szlaku na mapy.com ↗</a>
+  </dialog>
+
   <!-- Okienko ze szczegółami punktu (lista punktów) -->
   <dialog id="info-dialog" class="map-dialog info-dialog" aria-labelledby="info-title">
     <div class="map-head">
@@ -384,6 +401,6 @@
     <a id="map-open" class="btn primary map-open" href="#" target="_blank" rel="noopener">Otwórz w mapy.com ↗</a>
   </dialog>
 
-  <script src="app.js?v=24"></script>
+  <script src="app.js?v=25"></script>
 </body>
 </html>

@@ -16,6 +16,7 @@ try {
     create_schema();
     migrate_schema();
     $import = import_json_data(__DIR__ . '/data');
+    migrate_schema(); // po imporcie: uzupełnia informacje o szlakach z data/trails.json
     if (!$import['skipped']) {
         foreach ($import['counts'] as $trail => $n) {
             $messages[] = "Zaimportowano szlak " . strtoupper($trail) . ": {$n} punktów (trudność: łatwy).";

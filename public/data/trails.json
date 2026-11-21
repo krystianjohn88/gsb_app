@@ -1,10 +1,58 @@
 [
-  { "id": "gsb", "name": "Główny Szlak Beskidzki", "short": "GSB", "color": "#c0392b", "file": "gsb.json",
-    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=1080756308&x=21.2739571&y=49.4776249&z=10.748" },
-  { "id": "msb", "name": "Mały Szlak Beskidzki", "short": "MSB", "color": "#c0392b", "file": "msb.json",
-    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=1080849856&x=19.6265589&y=49.7413633&z=11" },
-  { "id": "nsk", "name": "Niebieski Szlak Karpacki", "short": "NSK", "color": "#2463b8", "file": "nsk.json",
-    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=1080747829&x=21.8466709&y=49.4937040&z=9" },
-  { "id": "twr", "name": "Niebieski szlak turystyczny Tarnów – Wielki Rogacz", "short": "TWR", "color": "#2463b8", "file": "twr.json",
-    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=1080750994&x=20.7042067&y=49.6873419&z=10" }
+  {
+    "id": "gsb",
+    "name": "Główny Szlak Beskidzki",
+    "short": "GSB",
+    "color": "#c0392b",
+    "file": "gsb.json",
+    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=1080756308&x=21.2739571&y=49.4776249&z=10.748",
+    "full_name": "Główny Szlak Beskidzki im. Kazimierza Sosnowskiego",
+    "founded": "Znakowanie od 1924 r.; zachodni odcinek otwarty w 1929 r., całość międzywojenna ukończona w 1935 r.",
+    "designer": "Koncepcję i zachodnią część opracował Kazimierz Sosnowski, wschodnią Mieczysław Orłowicz; patronem jest Sosnowski.",
+    "length": "Ok. 500 km (spotykane też 496 i 519 km).",
+    "tagline": "Najdłuższy szlak Polski",
+    "description": "Główny Szlak Beskidzki prowadzi czerwonym szlakiem z Ustronia do Wołosatego. Jego historia sięga inicjatywy Kazimierza Sosnowskiego z 1923 r.; pierwsze znakowanie rozpoczęto w 1924 r., a zachodni odcinek do Krynicy otwarto w 1929 r.\n\nW latach 1931–1935 wyznakowano dalsze części, tworząc pierwotnie fragment Głównego Szlaku Karpackiego im. Józefa Piłsudskiego. Po II wojnie światowej i zmianie granic obecny GSB liczy około 500 km i jest najdłuższym górskim szlakiem pieszym w Polsce."
+  },
+  {
+    "id": "msb",
+    "name": "Mały Szlak Beskidzki",
+    "short": "MSB",
+    "color": "#c0392b",
+    "file": "msb.json",
+    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=1080849856&x=19.6265589&y=49.7413633&z=11",
+    "full_name": "Mały Szlak Beskidzki",
+    "founded": "Pierwsze znakowanie w 1927 r.; rozwijany w latach 30. XX w.",
+    "designer": "Inicjatorem i pierwszym znakarzem był Władysław Midowicz; w wielu opracowaniach współtwórcą koncepcji wymienia się Kazimierza Sosnowskiego.",
+    "length": "137 km, ze Straconki w Bielsku-Białej na Luboń Wielki.",
+    "tagline": "Szlak przez Beskid Mały i Wyspowy",
+    "description": "MSB był nazywany dawniej Szlakiem Północnym. Prowadzi przez Beskid Mały, Makowski i Wyspowy — obszary, których nie obejmuje GSB — i kończy się na Luboniu Wielkim.\n\nPierwsze odcinki znakował Władysław Midowicz w 1927 r. Szlak nie ma jednej, powszechnie używanej nazwy patrona, choć w opracowaniach popularnych często łączy się jego koncepcję z Kazimierzem Sosnowskim."
+  },
+  {
+    "id": "nsk",
+    "name": "Niebieski Szlak Karpacki",
+    "short": "NSK",
+    "color": "#2463b8",
+    "file": "nsk.json",
+    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=1080747829&x=21.8466709&y=49.4937040&z=9",
+    "full_name": "Niebieski Szlak Karpacki",
+    "founded": "Utworzony w 2005 r.",
+    "designer": "Nie ma jednego osobistego projektanta; powstał jako projekt samorządowy i turystyczny, z udziałem Starostwa Powiatowego w Krośnie oraz organizacji turystycznych.",
+    "length": "Ok. 420–450 km; najczęściej podaje się 425 km lub około 440 km.",
+    "tagline": "Współczesna magistrala karpacka",
+    "description": "NSK to stosunkowo młody szlak: został utworzony w 2005 r. jako niebieska magistrala przez Karpaty, od Białej koło Rzeszowa do Grybowa koło Nowego Sącza.\n\nPrzebiega przez Pogórze Dynowskie, Przemyśl, Bieszczady, Beskid Niski, Pogórze Rożnowskie i Beskid Sądecki. Na odcinku w Beskidzie Niskim funkcjonuje pod nazwą szlaku im. Kazimierza Pułaskiego — jest to jednak patron odcinka, nie jego projektant."
+  },
+  {
+    "id": "twr",
+    "name": "Niebieski szlak turystyczny Tarnów – Wielki Rogacz",
+    "short": "TWR",
+    "color": "#2463b8",
+    "file": "twr.json",
+    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=1080750994&x=20.7042067&y=49.6873419&z=10",
+    "full_name": "Niebieski Szlak Tarnów – Wielki Rogacz",
+    "founded": "Jako kompletny szlak długodystansowy został sformalizowany w 2014 r.; niektóre jego fragmenty wyznakowano już w okresie międzywojennym.",
+    "designer": "Nie ma jednego projektanta całej trasy; fragmenty wyznakowali międzywojenni członkowie Tarnowskiego Oddziału PTT, a współczesną odznakę i promocję szlaku ustanowił ten oddział PTT.",
+    "length": "184 km według współczesnych opisów; PTT podaje ok. 191 km.",
+    "tagline": "Szlak Tarnów – Wielki Rogacz",
+    "description": "TWR to niebieski szlak długodystansowy z Tarnowa na Wielki Rogacz w Beskidzie Sądeckim. Prowadzi przez Pogórze Ciężkowickie i Rożnowskie, Beskid Wyspowy, Gorce, Pieniny oraz Beskid Sądecki.\n\nJako pełny, promowany szlak powstał w 2014 r., gdy tarnowski Oddział PTT ustanowił odznakę „Szlak Tarnów – Wielki Rogacz” dla uczczenia 90-lecia swojego istnienia. Niektóre odcinki istniały jednak wcześniej — wyznakowano je już w okresie międzywojennym.\n\nDługość szlaku podaje się zwykle jako 184 km, natomiast materiały PTT mówią o około 191 km; różnica wynika z przyjętego wariantu przebiegu i sposobu pomiaru. Całe przejście zajmuje około 55–56 godzin marszu."
+  }
 ]

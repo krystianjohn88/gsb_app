@@ -680,3 +680,17 @@ body.drag-active .insert-btn { display: none; }
 .info-section h3 { margin: 0 0 2px; font-size: .95rem; }
 .info-section p { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
 .info-dialog .btn { flex: 0 0 auto; }
+
+/* ℹ️ przy nazwie szlaku i okienko z informacjami o szlaku */
+.hero-title { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.info-btn {
+  width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--border); background: var(--card);
+  font-size: 1.15rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.info-btn:hover, .info-btn:focus-visible { border-color: var(--accent); outline: none; }
+.trail-facts { margin: 0; display: grid; gap: 2px 0; }
+.trail-facts dt { font-weight: 600; font-size: .85rem; color: var(--muted); margin-top: 6px; }
+.trail-facts dd { margin: 0; }
+.trail-desc p { margin: 8px 0 0; line-height: 1.5; }
+/* W okienkach długie tytuły (np. pełna nazwa szlaku) zawijają się zamiast „…” */
+.map-dialog .bar-title strong { white-space: normal; overflow-wrap: anywhere; }

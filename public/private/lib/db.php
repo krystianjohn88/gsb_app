@@ -1,6 +1,9 @@
 <?php
 // Połączenie z bazą (PDO, MySQL). Dane z private/config.php – poza repozytorium.
 
+// Pola informacji o szlaku (kolumny tabeli trails, te same klucze w data/trails.json).
+const TRAIL_INFO_FIELDS = ['map_url', 'full_name', 'tagline', 'founded', 'designer', 'length', 'description'];
+
 function config(): array
 {
     static $cfg = null;
@@ -43,6 +46,12 @@ function create_schema(): void
             short VARCHAR(10) NOT NULL,
             color VARCHAR(20) NOT NULL DEFAULT '#c0392b',
             map_url VARCHAR(500) NULL,
+            full_name VARCHAR(200) NULL,
+            tagline VARCHAR(200) NULL,
+            founded VARCHAR(500) NULL,
+            designer VARCHAR(500) NULL,
+            length VARCHAR(300) NULL,
+            description TEXT NULL,
             sort INT NOT NULL DEFAULT 0
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_polish_ci",
 
@@ -179,14 +188,26 @@ function migrate_schema(): array
             ADD CONSTRAINT fk_points_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL');
         $done[] = 'points.created_at/created_by';
     }
+    // 2026-11-21: informacje o szlaku (pełna nazwa, rok, projektant, długość, opis)
+    if ($col('trails', 'description') === false) {
+        $pdo->exec('ALTER TABLE trails ADD COLUMN full_name VARCHAR(200) NULL AFTER map_url,
+            ADD COLUMN tagline VARCHAR(200) NULL AFTER full_name, ADD COLUMN founded VARCHAR(500) NULL AFTER tagline,
+            ADD COLUMN designer VARCHAR(500) NULL AFTER founded, ADD COLUMN length VARCHAR(300) NULL AFTER designer,
+            ADD COLUMN description TEXT NULL AFTER length');
+        $done[] = 'trails.info';
+    }
+    // Wartości z data/trails.json tylko tam, gdzie w bazie jeszcze ich nie ma (nie nadpisuje zmian w bazie).
     $file = __DIR__ . '/../../data/trails.json';
     if (is_file($file)) {
-        $upd = $pdo->prepare('UPDATE trails SET map_url = ? WHERE id = ? AND map_url IS NULL');
         foreach (json_decode(file_get_contents($file), true) as $t) {
-            if (!empty($t['map_url'])) {
-                $upd->execute([$t['map_url'], $t['id']]);
+            foreach (TRAIL_INFO_FIELDS as $field) {
+                if (empty($t[$field])) {
+                    continue;
+                }
+                $upd = $pdo->prepare("UPDATE trails SET {$field} = ? WHERE id = ? AND {$field} IS NULL");
+                $upd->execute([$t[$field], $t['id']]);
                 if ($upd->rowCount()) {
-                    $done[] = "map_url {$t['id']}";
+                    $done[] = "{$field} {$t['id']}";
                 }
             }
         }

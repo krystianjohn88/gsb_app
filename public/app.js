@@ -278,6 +278,8 @@ function renderTrails() {
   }
   document.documentElement.style.setProperty('--trail', state.trail.color);
   $('trail-short').textContent = state.trail.short;
+  $('trail-info-btn').hidden = !(state.trail.description || state.trail.full_name);
+  $('trail-info-btn').setAttribute('aria-label', `Informacje o szlaku ${state.trail.short}`);
   $('trail-name').textContent = `${state.trail.name} – wpisuj kolejne punkty trasy`;
   // Link do mapy szlaku – tylko adresy https z mapy.com (na telefonie otwiera aplikację Mapy.com, jeśli jest).
   const map = $('trail-map');
@@ -288,6 +290,45 @@ function renderTrails() {
     map.setAttribute('aria-label', `Mapa szlaku ${state.trail.short} na mapy.com (otwiera się w nowej karcie)`);
   }
 }
+
+// --- informacje o szlaku (ℹ️ przy nazwie szlaku na ekranie startowym) ---------------------
+
+function openTrailInfo() {
+  const t = state.trail;
+  $('trail-info-title').textContent = t.full_name || t.name;
+  $('trail-info-sub').textContent = [t.short, t.tagline].filter(Boolean).join(' · ');
+  const facts = $('trail-info-facts');
+  facts.replaceChildren();
+  for (const [label, value] of [['📅 Powstanie', t.founded], ['👤 Projektant / patron', t.designer], ['📏 Długość', t.length]]) {
+    if (!value) continue;
+    const dt = document.createElement('dt');
+    dt.textContent = label;
+    const dd = document.createElement('dd');
+    dd.textContent = value;
+    facts.append(dt, dd);
+  }
+  // Opis: akapity rozdzielone pustą linią.
+  const desc = $('trail-info-desc');
+  desc.replaceChildren(...(t.description || '').split(/\n\s*\n/).filter((s) => s.trim()).map((s) => {
+    const p = document.createElement('p');
+    p.textContent = s.trim();
+    return p;
+  }));
+  const url = safeMapUrl(t.map_url);
+  $('trail-info-map').hidden = !url;
+  if (url) $('trail-info-map').href = url;
+  if (!$('trail-dialog').open) $('trail-dialog').showModal();
+  $('trail-dialog').scrollTop = 0;
+}
+
+$('trail-info-btn').addEventListener('click', openTrailInfo);
+$('trail-info-close').addEventListener('click', () => $('trail-dialog').close());
+$('trail-dialog').addEventListener('click', (e) => {
+  const dlg = $('trail-dialog');
+  if (e.target !== dlg) return;
+  const r = dlg.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dlg.close();
+});
 
 function safeMapUrl(value) {
   try {

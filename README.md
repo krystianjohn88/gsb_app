@@ -74,6 +74,8 @@ minut łączyć nową stronę ze starym skryptem z pamięci podręcznej.
 ## Dane – `public/data/`
 
 - `trails.json` – szlaki: `id`, `name`, `short`, `color` (kolor znakowania), `file`, `map_url` (link do mapy szlaku na mapy.com – przycisk „🗺️ Mapa szlaku”)
+  oraz informacje o szlaku do okienka ℹ️: `full_name`, `tagline`, `founded`, `designer`, `length`, `description`
+  (akapity rozdzielone pustą linią); w bazie uzupełniane z pliku tylko tam, gdzie są puste
 - `gsb.json`, `msb.json`, `nsk.json`, `twr.json` – punkty w kolejności (wg `id`):
 
 ```json
