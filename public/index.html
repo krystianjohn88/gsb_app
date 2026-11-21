@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=24">
+  <link rel="stylesheet" href="styles.css?v=25">
 </head>
 <body>
   <!-- Ekran startowy: wybór zakresu nauki -->
@@ -191,10 +191,39 @@
       <label>Login <input id="login-login" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>
       <label>Hasło <input id="login-password" type="password" required autocomplete="current-password"></label>
       <p id="login-https" class="feedback revealed" hidden>⚠️ Połączenie nie jest szyfrowane (HTTP) – hasło idzie jawnym tekstem.</p>
+      <p id="login-info" class="feedback ok" aria-live="polite"></p>
       <p id="login-error" class="feedback bad" aria-live="polite"></p>
+      <button id="login-resend" class="btn" type="button" hidden>✉️ Wyślij link ponownie</button>
       <button id="login-submit" class="btn primary big" type="submit">Zaloguj</button>
-      <small class="muted">Konta zakłada administrator.</small>
+      <p class="muted register-hint">Nie masz konta? <button id="go-register" class="link-btn" type="button">Załóż konto</button></p>
     </form>
+  </section>
+
+  <!-- Rejestracja (zwykłe konto użytkownika, potwierdzane linkiem z e-maila) -->
+  <section id="screen-register" class="screen">
+    <header class="bar">
+      <button id="register-back" class="icon-btn" type="button" aria-label="Wróć do logowania">←</button>
+      <div class="bar-title"><strong>Załóż konto</strong></div>
+    </header>
+    <form id="register-form" class="form" autocomplete="off">
+      <label>Login (3–50 znaków) <input id="reg-login" required minlength="3" maxlength="50" autocomplete="username"
+             autocapitalize="none" spellcheck="false"></label>
+      <label>E-mail <input id="reg-email" type="email" required maxlength="190" autocomplete="email" autocapitalize="none"
+             spellcheck="false"></label>
+      <label>Hasło (min. 8 znaków) <input id="reg-password" type="password" required minlength="8" autocomplete="new-password"></label>
+      <label>Powtórz hasło <input id="reg-password2" type="password" required minlength="8" autocomplete="new-password"></label>
+      <!-- Pułapka na boty: pole niewidoczne dla ludzi, wypełniają je tylko automaty. -->
+      <label class="hp" aria-hidden="true">Strona www <input id="reg-website" tabindex="-1" autocomplete="off"></label>
+      <p id="register-error" class="feedback bad" aria-live="polite"></p>
+      <button id="register-submit" class="btn primary big" type="submit">Załóż konto</button>
+      <small class="muted">Na podany adres wyślemy link – konto zadziała po jego kliknięciu (link ważny 48 godzin).</small>
+    </form>
+    <div id="register-done" class="setting" hidden>
+      <strong>✉️ Sprawdź skrzynkę</strong>
+      <p id="register-done-text"></p>
+      <small class="muted">Nie widzisz wiadomości? Zajrzyj do spamu. Nowy link możesz wysłać z ekranu logowania.</small>
+      <button id="register-to-login" class="btn primary" type="button">Przejdź do logowania</button>
+    </div>
   </section>
 
   <!-- Konto: historia wyników, zmiana hasła -->
@@ -246,6 +275,7 @@
       <strong>Nowe konto</strong>
       <label>Login <input id="new-login" required minlength="3" maxlength="50" autocapitalize="none" spellcheck="false"></label>
       <label>Hasło (min. 8 znaków) <input id="new-password" type="password" required minlength="8" autocomplete="new-password"></label>
+      <label>E-mail (opcjonalnie) <input id="new-email" type="email" maxlength="190" autocapitalize="none" spellcheck="false"></label>
       <label>Rola <select id="new-role"></select></label>
       <button class="btn primary" type="submit">＋ Załóż konto</button>
     </form>
@@ -401,6 +431,6 @@
     <a id="map-open" class="btn primary map-open" href="#" target="_blank" rel="noopener">Otwórz w mapy.com ↗</a>
   </dialog>
 
-  <script src="app.js?v=25"></script>
+  <script src="app.js?v=26"></script>
 </body>
 </html>

@@ -194,6 +194,7 @@ async function api(route, { method = 'GET', body, query } = {}) {
   if (!res.ok) {
     const err = new Error((data && data.error) || `Błąd ${res.status}`);
     err.status = res.status;
+    err.reason = data && data.reason;
     throw err;
   }
   return data;
@@ -1235,6 +1236,8 @@ $('account-btn').addEventListener('click', () => (state.user ? showAccount() : s
 
 function showLogin() {
   $('login-error').textContent = '';
+  $('login-info').textContent = '';
+  $('login-resend').hidden = true;
   $('login-password').value = '';
   $('login-https').hidden = location.protocol === 'https:';
   show('login');
@@ -1259,11 +1262,102 @@ $('login-form').addEventListener('submit', async (e) => {
     show('start');
   } catch (err) {
     $('login-error').textContent = `✗ ${err.message}`;
+    // Konto bez potwierdzonego e-maila: można poprosić o nowy link.
+    $('login-resend').hidden = err.reason !== 'unverified';
   } finally {
     btn.disabled = false;
   }
 });
 $('login-back').addEventListener('click', () => show('start'));
+
+$('login-resend').addEventListener('click', async () => {
+  const btn = $('login-resend');
+  btn.disabled = true;
+  try {
+    await api('resend_verification', { method: 'POST', body: { login: $('login-login').value.trim() } });
+    $('login-error').textContent = '';
+    $('login-info').textContent = '✉️ Jeśli konto czeka na potwierdzenie, wysłaliśmy nowy link (nie częściej niż co 2 minuty).';
+    btn.hidden = true;
+  } catch (err) {
+    $('login-error').textContent = `✗ ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// --- rejestracja ------------------------------------------------------------------------
+
+$('go-register').addEventListener('click', showRegister);
+$('register-back').addEventListener('click', () => showLogin());
+$('register-to-login').addEventListener('click', () => showLogin());
+
+async function showRegister() {
+  $('register-form').hidden = false;
+  $('register-done').hidden = true;
+  $('register-error').textContent = '';
+  $('register-submit').disabled = false;
+  show('register');
+  // Limit kont albo wyłączona rejestracja – od razu informacja zamiast formularza do wypełnienia.
+  try {
+    const info = await api('register_info');
+    if (!info.open) {
+      $('register-error').textContent = info.reason === 'limit'
+        ? '✗ Osiągnięto limit kont – rejestracja jest chwilowo niedostępna.'
+        : '✗ Rejestracja nowych kont jest wyłączona.';
+      $('register-submit').disabled = true;
+    }
+  } catch {}
+  $('reg-login').focus({ preventScroll: true });
+}
+
+$('register-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = $('register-error');
+  if ($('reg-password').value !== $('reg-password2').value) {
+    err.textContent = '✗ Hasła się różnią.';
+    return;
+  }
+  const btn = $('register-submit');
+  btn.disabled = true;
+  err.textContent = '';
+  try {
+    const res = await api('register', {
+      method: 'POST',
+      body: {
+        login: $('reg-login').value.trim(),
+        email: $('reg-email').value.trim(),
+        password: $('reg-password').value,
+        website: $('reg-website').value,
+      },
+    });
+    $('register-done-text').textContent =
+      `Wysłaliśmy link na ${res.email}. Kliknij go, aby aktywować konto, a potem zaloguj się.`;
+    $('login-login').value = $('reg-login').value.trim();
+    e.target.reset();
+    $('register-form').hidden = true;
+    $('register-done').hidden = false;
+  } catch (ex) {
+    err.textContent = `✗ ${ex.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Link z e-maila: /?verify=<token> – potwierdzenie konta i przejście do logowania.
+async function handleVerifyLink() {
+  const token = new URLSearchParams(location.search).get('verify');
+  if (!token || !state.api) return;
+  history.replaceState(null, '', location.pathname); // token nie zostaje w pasku adresu ani w historii
+  showLogin();
+  try {
+    const res = await api('verify', { method: 'POST', body: { token } });
+    $('login-login').value = res.login;
+    $('login-info').textContent = `✓ Adres e-mail potwierdzony – konto „${res.login}” jest aktywne. Zaloguj się.`;
+    $('login-password').focus({ preventScroll: true });
+  } catch (err) {
+    $('login-error').textContent = `✗ ${err.message}`;
+  }
+}
 
 async function showAccount() {
   $('account-login').textContent = state.user.login;
@@ -1436,7 +1530,10 @@ async function renderUsers() {
     const strong = document.createElement('strong');
     strong.textContent = u.login;
     const small = document.createElement('small');
-    small.textContent = u.last_login ? `ostatnio: ${formatDate(u.last_login)}` : 'jeszcze się nie logował(a)';
+    small.textContent = [
+      u.email ? `${u.email}${u.email_verified ? '' : ' · ✉️ niepotwierdzony'}` : null,
+      u.last_login ? `ostatnio: ${formatDate(u.last_login)}` : 'jeszcze się nie logował(a)',
+    ].filter(Boolean).join(' · ');
     name.append(strong, small);
 
     const role = document.createElement('select');
@@ -1506,7 +1603,12 @@ $('new-user-form').addEventListener('submit', async (e) => {
   try {
     const u = await api('users', {
       method: 'POST',
-      body: { login: $('new-login').value.trim(), password: $('new-password').value, role: $('new-role').value },
+      body: {
+        login: $('new-login').value.trim(),
+        password: $('new-password').value,
+        email: $('new-email').value.trim(),
+        role: $('new-role').value,
+      },
     });
     setUsersMessage(`✓ Założono konto: ${u.login} (${ROLE_LABEL[u.role]})`, 'ok');
     e.target.reset();
@@ -2118,6 +2220,7 @@ loadTrails()
     renderAccount();
     return selectTrail(state.trail);
   })
+  .then(handleVerifyLink)
   .catch((err) => {
     $('parts').innerHTML = `<li class="error">Nie udało się wczytać danych: ${err.message}</li>`;
   });

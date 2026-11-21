@@ -4,6 +4,20 @@
 // Pola informacji o szlaku (kolumny tabeli trails, te same klucze w data/trails.json).
 const TRAIL_INFO_FIELDS = ['map_url', 'full_name', 'tagline', 'founded', 'designer', 'length', 'description'];
 
+// Ustawienia w tabeli settings: nazwa => [wartość domyślna, opis]. Zmienia się je tylko w bazie.
+const DEFAULT_SETTINGS = [
+    'max_users' => ['100', 'Maksymalna liczba kont (wszystkie role). Po osiągnięciu limitu rejestracja jest zablokowana.'],
+    'registration_open' => ['1', 'Czy użytkownicy mogą sami zakładać konta: 1 = tak, 0 = nie.'],
+];
+
+function setting(string $name): string
+{
+    $st = db()->prepare('SELECT value FROM settings WHERE name = ?');
+    $st->execute([$name]);
+    $v = $st->fetchColumn();
+    return $v === false ? DEFAULT_SETTINGS[$name][0] : (string) $v;
+}
+
 function config(): array
 {
     static $cfg = null;
@@ -60,10 +74,30 @@ function create_schema(): void
             login VARCHAR(50) NOT NULL UNIQUE,
             password_hash VARCHAR(255) NOT NULL,
             role ENUM('admin','editor','user') NOT NULL DEFAULT 'user',
+            email VARCHAR(190) NULL UNIQUE,
+            email_verified TINYINT(1) NOT NULL DEFAULT 1,
+            verify_token_hash CHAR(64) NULL,
+            verify_expires DATETIME NULL,
+            verify_sent_at DATETIME NULL,
             failed_logins INT NOT NULL DEFAULT 0,
             locked_until DATETIME NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             last_login DATETIME NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_polish_ci",
+
+        // Ustawienia zmieniane tylko w bazie (np. w phpMyAdmin): limit kont, czy rejestracja jest otwarta.
+        "CREATE TABLE IF NOT EXISTS settings (
+            name VARCHAR(50) PRIMARY KEY,
+            value VARCHAR(200) NOT NULL,
+            description VARCHAR(300) NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_polish_ci",
+
+        // Proste ograniczanie liczby prób (rejestracja, ponowne wysłanie linku) – wpis na każdą próbę.
+        "CREATE TABLE IF NOT EXISTS rate_limits (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            bucket VARCHAR(120) NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_bucket (bucket, created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_polish_ci",
 
         "CREATE TABLE IF NOT EXISTS points (
@@ -187,6 +221,23 @@ function migrate_schema(): array
         $pdo->exec('ALTER TABLE points ADD COLUMN created_at DATETIME NULL AFTER lon, ADD COLUMN created_by INT NULL AFTER created_at,
             ADD CONSTRAINT fk_points_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL');
         $done[] = 'points.created_at/created_by';
+    }
+    // 2026-11-21: rejestracja z weryfikacją e-mail (istniejące konta – zweryfikowane)
+    if ($col('users', 'email') === false) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN email VARCHAR(190) NULL UNIQUE AFTER role,
+            ADD COLUMN email_verified TINYINT(1) NOT NULL DEFAULT 1 AFTER email,
+            ADD COLUMN verify_token_hash CHAR(64) NULL AFTER email_verified,
+            ADD COLUMN verify_expires DATETIME NULL AFTER verify_token_hash,
+            ADD COLUMN verify_sent_at DATETIME NULL AFTER verify_expires');
+        $done[] = 'users.email/verification';
+    }
+    // Domyślne ustawienia (tylko gdy ich jeszcze nie ma – nie nadpisuje zmian w bazie).
+    $ins = $pdo->prepare('INSERT IGNORE INTO settings (name, value, description) VALUES (?, ?, ?)');
+    foreach (DEFAULT_SETTINGS as $name => [$value, $description]) {
+        $ins->execute([$name, $value, $description]);
+        if ($ins->rowCount()) {
+            $done[] = "settings.{$name}";
+        }
     }
     // 2026-11-21: informacje o szlaku (pełna nazwa, rok, projektant, długość, opis)
     if ($col('trails', 'description') === false) {

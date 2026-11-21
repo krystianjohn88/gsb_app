@@ -5,6 +5,7 @@
 // Role: admin – wszystko (także konta), editor – punkty, user – własne wyniki.
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/mail.php';
 
 const TYPES = ['góra', 'przełęcz', 'schronisko', 'miasto', 'polana', 'inne'];
 const DIFFICULTIES = ['łatwy', 'średni', 'trudny'];
@@ -12,21 +13,25 @@ const ROLES = ['admin', 'editor', 'user'];
 const SESSION_DAYS = 30;
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
+const VERIFY_HOURS = 48;            // ważność linku potwierdzającego e-mail
+const RESEND_MIN_SECONDS = 120;     // nie częściej niż co 2 minuty nowy link na to samo konto
 
 class ApiError extends Exception
 {
     public $status;
+    public $reason;   // krótki kod dla frontendu, np. 'unverified'
 
-    public function __construct(int $status, string $message)
+    public function __construct(int $status, string $message, ?string $reason = null)
     {
         parent::__construct($message);
         $this->status = $status;
+        $this->reason = $reason;
     }
 }
 
-function fail(int $status, string $message): void
+function fail(int $status, string $message, ?string $reason = null): void
 {
-    throw new ApiError($status, $message);
+    throw new ApiError($status, $message, $reason);
 }
 
 // --- sesje i uprawnienia ------------------------------------------------------------
@@ -504,9 +509,155 @@ function user_out(array $u): array
         'id' => (int) $u['id'],
         'login' => $u['login'],
         'role' => $u['role'],
+        'email' => $u['email'] ?? null,
+        'email_verified' => !isset($u['email_verified']) || (bool) $u['email_verified'],
         'created_at' => $u['created_at'] ?? null,
         'last_login' => $u['last_login'] ?? null,
     ];
+}
+
+// --- rejestracja i weryfikacja e-mail ------------------------------------------------
+
+function email_field(array $b, bool $required = true): ?string
+{
+    $v = mb_strtolower(trim((string) ($b['email'] ?? '')));
+    if ($v === '') {
+        if ($required) {
+            fail(422, 'Podaj adres e-mail.');
+        }
+        return null;
+    }
+    if (mb_strlen($v) > 190 || !filter_var($v, FILTER_VALIDATE_EMAIL)) {
+        fail(422, 'Nieprawidłowy adres e-mail.');
+    }
+    return $v;
+}
+
+// „k***@gmail.com” – do komunikatów, żeby nie ujawniać pełnego adresu.
+function mask_email(string $email): string
+{
+    [$name, $domain] = array_pad(explode('@', $email, 2), 2, '');
+    return mb_substr($name, 0, 1) . '***@' . $domain;
+}
+
+function client_ip(): string
+{
+    return substr((string) ($_SERVER['REMOTE_ADDR'] ?? 'cli'), 0, 64);
+}
+
+// Najwyżej $max prób w oknie $seconds dla danego klucza (np. adres IP).
+function rate_limit(string $bucket, int $max, int $seconds): void
+{
+    $pdo = db();
+    $pdo->prepare('DELETE FROM rate_limits WHERE created_at < ?')->execute([date('Y-m-d H:i:s', time() - 86400)]);
+    $st = $pdo->prepare('SELECT COUNT(*) FROM rate_limits WHERE bucket = ? AND created_at > ?');
+    $st->execute([$bucket, date('Y-m-d H:i:s', time() - $seconds)]);
+    if ((int) $st->fetchColumn() >= $max) {
+        fail(429, 'Za dużo prób – spróbuj ponownie później.');
+    }
+    $pdo->prepare('INSERT INTO rate_limits (bucket) VALUES (?)')->execute([$bucket]);
+}
+
+// Niepotwierdzone konta po terminie są usuwane – nie zajmują loginu, adresu ani miejsca w limicie.
+function purge_unverified(): void
+{
+    db()->exec('DELETE FROM users WHERE email_verified = 0 AND verify_expires < NOW()');
+}
+
+function registration_info(): array
+{
+    purge_unverified();
+    $count = (int) db()->query('SELECT COUNT(*) FROM users')->fetchColumn();
+    $max = (int) setting('max_users');
+    $open = setting('registration_open') === '1';
+    return ['open' => $open && $count < $max, 'reason' => !$open ? 'closed' : ($count >= $max ? 'limit' : null)];
+}
+
+// Nowy link potwierdzający: zapisuje skrót tokenu i wysyła e-mail. Zwraca false, gdy wysyłka się nie udała.
+function send_verification(array $u): bool
+{
+    $token = bin2hex(random_bytes(32));
+    db()->prepare('UPDATE users SET verify_token_hash = ?, verify_expires = ?, verify_sent_at = NOW() WHERE id = ?')
+        ->execute([hash('sha256', $token), date('Y-m-d H:i:s', time() + VERIFY_HOURS * 3600), $u['id']]);
+    $url = rtrim(mail_config()['base_url'], '/') . '/?verify=' . $token;
+    $text = "Cześć {$u['login']}!\n\n"
+        . "Ktoś (mamy nadzieję, że Ty) założył konto w aplikacji „Szlaki długodystansowe Beskidów”.\n"
+        . "Aby potwierdzić adres e-mail i aktywować konto, otwórz link:\n\n{$url}\n\n"
+        . 'Link jest ważny ' . VERIFY_HOURS . " godzin. Jeśli to nie Ty zakładałeś(-aś) konto, po prostu zignoruj tę wiadomość –\n"
+        . "niepotwierdzone konto zostanie usunięte.\n\n"
+        . "Szlaki długodystansowe Beskidów\nhttps://szlaki.kj88.pl\n";
+    return send_mail($u['email'], 'Potwierdź konto – Szlaki długodystansowe Beskidów', $text);
+}
+
+function register(array $b): array
+{
+    $pdo = db();
+    // Pole-pułapka niewidoczne dla ludzi: wypełnia je tylko bot. Udajemy sukces, nic nie zakładamy.
+    if (trim((string) ($b['website'] ?? '')) !== '') {
+        return ['email' => '***', 'sent' => true];
+    }
+    $info = registration_info();
+    if (!$info['open']) {
+        fail(403, $info['reason'] === 'limit'
+            ? 'Osiągnięto limit kont – rejestracja jest chwilowo niedostępna.'
+            : 'Rejestracja nowych kont jest wyłączona.', 'registration_' . $info['reason']);
+    }
+    $login = login_field($b);
+    $email = email_field($b);
+    $hash = password_hash(password_field($b), PASSWORD_DEFAULT);
+    rate_limit('register:' . client_ip(), 5, 3600);
+
+    $st = $pdo->prepare('SELECT login = ? AS same_login, email = ? AS same_email FROM users WHERE login = ? OR email = ?');
+    $st->execute([$login, $email, $login, $email]);
+    foreach ($st->fetchAll() as $r) {
+        if ($r['same_login']) {
+            fail(409, 'Taki login już istnieje.');
+        }
+        fail(409, 'Ten adres e-mail jest już używany.');
+    }
+    $pdo->prepare("INSERT INTO users (login, password_hash, role, email, email_verified) VALUES (?, ?, 'user', ?, 0)")
+        ->execute([$login, $hash, $email]);
+    $u = find_user((int) $pdo->lastInsertId());
+    if (!send_verification($u)) {
+        // Bez e-maila nie da się aktywować konta – usuwamy je, żeby można było spróbować ponownie.
+        $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$u['id']]);
+        fail(502, 'Nie udało się wysłać e-maila z linkiem. Spróbuj ponownie za chwilę.');
+    }
+    return ['email' => mask_email($email), 'sent' => true];
+}
+
+function verify_email(array $b): array
+{
+    $token = (string) ($b['token'] ?? '');
+    if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
+        fail(400, 'Link jest nieprawidłowy.');
+    }
+    $st = db()->prepare('SELECT * FROM users WHERE verify_token_hash = ? AND email_verified = 0 AND verify_expires > NOW()');
+    $st->execute([hash('sha256', $token)]);
+    $u = $st->fetch();
+    if (!$u) {
+        fail(400, 'Link jest nieprawidłowy albo wygasł. Załóż konto ponownie albo poproś o nowy link przy logowaniu.');
+    }
+    db()->prepare('UPDATE users SET email_verified = 1, verify_token_hash = NULL, verify_expires = NULL WHERE id = ?')
+        ->execute([$u['id']]);
+    return ['login' => $u['login'], 'verified' => true];
+}
+
+// Nowy link na prośbę (np. z ekranu logowania). Zawsze ta sama odpowiedź – nie zdradza, czy konto istnieje.
+function resend_verification(array $b): array
+{
+    rate_limit('resend:' . client_ip(), 5, 3600);
+    $who = mb_strtolower(trim((string) ($b['login'] ?? '')));
+    if ($who !== '') {
+        purge_unverified();
+        $st = db()->prepare('SELECT * FROM users WHERE (login = ? OR email = ?) AND email_verified = 0');
+        $st->execute([$who, $who]);
+        $u = $st->fetch();
+        if ($u && (!$u['verify_sent_at'] || strtotime($u['verify_sent_at']) < time() - RESEND_MIN_SECONDS)) {
+            send_verification($u);
+        }
+    }
+    return ['ok' => true];
 }
 
 function login(array $b): array
@@ -531,6 +682,10 @@ function login(array $b): array
         usleep(400000); // spowalnia zgadywanie haseł
         fail(401, 'Nieprawidłowy login lub hasło.');
     }
+    if (isset($u['email_verified']) && !(int) $u['email_verified']) {
+        fail(403, 'Konto czeka na potwierdzenie – kliknij link z e-maila wysłanego na ' . mask_email((string) $u['email']) . '.',
+            'unverified');
+    }
 
     $token = bin2hex(random_bytes(32));
     $pdo->prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)')
@@ -547,15 +702,25 @@ function login(array $b): array
 
 function create_user(array $b): array
 {
+    // Konto zakładane przez administratora: e-mail opcjonalny, od razu potwierdzone.
     $login = login_field($b);
     $hash = password_hash(password_field($b), PASSWORD_DEFAULT);
     $role = enum_field($b, 'role', ROLES);
+    $email = email_field($b, false);
     $st = db()->prepare('SELECT 1 FROM users WHERE login = ?');
     $st->execute([$login]);
     if ($st->fetchColumn()) {
         fail(409, 'Taki login już istnieje.');
     }
-    db()->prepare('INSERT INTO users (login, password_hash, role) VALUES (?, ?, ?)')->execute([$login, $hash, $role]);
+    if ($email) {
+        $st = db()->prepare('SELECT 1 FROM users WHERE email = ?');
+        $st->execute([$email]);
+        if ($st->fetchColumn()) {
+            fail(409, 'Ten adres e-mail jest już używany.');
+        }
+    }
+    db()->prepare('INSERT INTO users (login, password_hash, role, email, email_verified) VALUES (?, ?, ?, ?, 1)')
+        ->execute([$login, $hash, $role, $email]);
     return user_out(find_user((int) db()->lastInsertId()));
 }
 
@@ -709,6 +874,15 @@ function handle_request(string $method, string $route, array $query, array $body
             case 'POST login':
                 return [200, login($body)];
 
+            case 'GET register_info':
+                return [200, registration_info()];
+            case 'POST register':
+                return [201, register($body)];
+            case 'POST verify':
+                return [200, verify_email($body)];
+            case 'POST resend_verification':
+                return [200, resend_verification($body)];
+
             case 'POST logout':
                 if ($token) {
                     $pdo->prepare('DELETE FROM sessions WHERE token_hash = ?')->execute([hash('sha256', $token)]);
@@ -758,6 +932,6 @@ function handle_request(string $method, string $route, array $query, array $body
         }
         return [404, ['error' => 'Nieznany adres API.']];
     } catch (ApiError $e) {
-        return [$e->status, ['error' => $e->getMessage()]];
+        return [$e->status, ['error' => $e->getMessage()] + ($e->reason ? ['reason' => $e->reason] : [])];
     }
 }

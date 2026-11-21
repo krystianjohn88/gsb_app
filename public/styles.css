@@ -694,3 +694,13 @@ body.drag-active .insert-btn { display: none; }
 .trail-desc p { margin: 8px 0 0; line-height: 1.5; }
 /* W okienkach długie tytuły (np. pełna nazwa szlaku) zawijają się zamiast „…” */
 .map-dialog .bar-title strong { white-space: normal; overflow-wrap: anywhere; }
+
+/* Logowanie / rejestracja */
+.link-btn { font: inherit; color: var(--accent); background: none; border: 0; padding: 4px 2px; text-decoration: underline; cursor: pointer; font-weight: 600; }
+.register-hint { text-align: center; }
+.form .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.feedback:empty { display: none; }
+#register-done { gap: 8px; }
+#register-done p { margin: 0; }
+.u-name { flex-wrap: wrap; }
+.u-name small { overflow-wrap: anywhere; }

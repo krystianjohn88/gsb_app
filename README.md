@@ -56,6 +56,12 @@ Aplikacja liczy zgodność w procentach (odległość Levenshteina) i zalicza od
   przez punkt), `notes` (ciekawostki). Dotknięcie punktu na liście (poza edycją) otwiera okienko ze szczegółami.
 - **Filtr listy:** checkboxy „Pokaż: łatwe / średnie / trudne”.
 - **Logowanie:** token w nagłówku `X-Auth-Token`, ważny 30 dni; po 5 złych hasłach konto blokuje się na 15 minut.
+- **Rejestracja:** użytkownicy sami zakładają konta (rola `user`) i potwierdzają e-mail linkiem (ważny 48 h,
+  niepotwierdzone konta są potem usuwane). E-maile z `serwis@szlaki.kj88.pl` – przez SMTP, gdy w `private/config.php`
+  jest sekcja `mail.smtp` z hasłem, inaczej funkcją `mail()` serwera. Ochrona: pole-pułapka na boty i limit prób z jednego IP.
+- **Ustawienia tylko w bazie** (tabela `settings`, np. w phpMyAdmin): `max_users` – limit wszystkich kont (domyślnie 100),
+  `registration_open` – `1` rejestracja otwarta, `0` zamknięta.
+  Przykład: `UPDATE settings SET value = 200 WHERE name = max_users;`
 - Bez API (np. lokalnie w Dockerze) aplikacja sama czyta `data/*.json` – tylko nauka, bez kont.
 
 ### Instalacja na nowym serwerze
