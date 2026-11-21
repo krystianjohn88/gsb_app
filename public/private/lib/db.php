@@ -42,6 +42,7 @@ function create_schema(): void
             name VARCHAR(200) NOT NULL,
             short VARCHAR(10) NOT NULL,
             color VARCHAR(20) NOT NULL DEFAULT '#c0392b',
+            map_url VARCHAR(500) NULL,
             sort INT NOT NULL DEFAULT 0
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_polish_ci",
 
@@ -127,6 +128,23 @@ function migrate_schema(): array
         $pdo->exec("ALTER TABLE results ADD COLUMN level ENUM('łatwy','średni','trudny') NULL AFTER mode");
         $done[] = 'results.level';
     }
+    // 2026-11-21: link do mapy szlaku (mapy.com); wartości z data/trails.json dla szlaków, które go nie mają
+    if ($col('trails', 'map_url') === false) {
+        $pdo->exec('ALTER TABLE trails ADD COLUMN map_url VARCHAR(500) NULL AFTER color');
+        $done[] = 'trails.map_url';
+    }
+    $file = __DIR__ . '/../../data/trails.json';
+    if (is_file($file)) {
+        $upd = $pdo->prepare('UPDATE trails SET map_url = ? WHERE id = ? AND map_url IS NULL');
+        foreach (json_decode(file_get_contents($file), true) as $t) {
+            if (!empty($t['map_url'])) {
+                $upd->execute([$t['map_url'], $t['id']]);
+                if ($upd->rowCount()) {
+                    $done[] = "map_url {$t['id']}";
+                }
+            }
+        }
+    }
     return $done;
 }
 
@@ -142,13 +160,13 @@ function import_json_data(string $dataDir): array
     $counts = [];
     $pdo->beginTransaction();
     try {
-        $insTrail = $pdo->prepare('INSERT INTO trails (id, name, short, color, sort) VALUES (?, ?, ?, ?, ?)');
+        $insTrail = $pdo->prepare('INSERT INTO trails (id, name, short, color, map_url, sort) VALUES (?, ?, ?, ?, ?, ?)');
         $insPoint = $pdo->prepare(
             'INSERT INTO points (trail_id, position, region, label, type, height, difficulty)
              VALUES (?, ?, ?, ?, ?, ?, \'łatwy\')'
         );
         foreach ($trails as $i => $t) {
-            $insTrail->execute([$t['id'], $t['name'], $t['short'], $t['color'], $i + 1]);
+            $insTrail->execute([$t['id'], $t['name'], $t['short'], $t['color'], $t['map_url'] ?? null, $i + 1]);
             $points = json_decode(file_get_contents($dataDir . '/' . $t['file']), true);
             usort($points, function ($a, $b) { return $a['id'] <=> $b['id']; });
             foreach ($points as $pos => $p) {

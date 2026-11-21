@@ -1,6 +1,10 @@
 [
-  { "id": "gsb", "name": "Główny Szlak Beskidzki", "short": "GSB", "color": "#c0392b", "file": "gsb.json" },
-  { "id": "msb", "name": "Mały Szlak Beskidzki", "short": "MSB", "color": "#c0392b", "file": "msb.json" },
-  { "id": "nsk", "name": "Niebieski Szlak Karpacki", "short": "NSK", "color": "#2463b8", "file": "nsk.json" },
-  { "id": "twr", "name": "Niebieski szlak turystyczny Tarnów – Wielki Rogacz", "short": "TWR", "color": "#2463b8", "file": "twr.json" }
+  { "id": "gsb", "name": "Główny Szlak Beskidzki", "short": "GSB", "color": "#c0392b", "file": "gsb.json",
+    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=1080756308&x=21.2739571&y=49.4776249&z=10.748" },
+  { "id": "msb", "name": "Mały Szlak Beskidzki", "short": "MSB", "color": "#c0392b", "file": "msb.json",
+    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=1080849856&x=19.6265589&y=49.7413633&z=11" },
+  { "id": "nsk", "name": "Niebieski Szlak Karpacki", "short": "NSK", "color": "#2463b8", "file": "nsk.json",
+    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=1080747829&x=21.8466709&y=49.4937040&z=9" },
+  { "id": "twr", "name": "Niebieski szlak turystyczny Tarnów – Wielki Rogacz", "short": "TWR", "color": "#2463b8", "file": "twr.json",
+    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=1080750994&x=20.7042067&y=49.6873419&z=10" }
 ]

@@ -548,3 +548,15 @@ details.setting[open] summary { margin-bottom: 8px; }
   25% { transform: translateX(-6px); }
   75% { transform: translateX(6px); }
 }
+
+/* Link do mapy szlaku (mapy.com) */
+.map-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  text-decoration: none;
+  font-weight: 600;
+  color: var(--accent);
+}

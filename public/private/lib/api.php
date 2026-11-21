@@ -486,7 +486,7 @@ function handle_request(string $method, string $route, array $query, array $body
 
         switch ("{$method} {$route}") {
             case 'GET trails':
-                $rows = $pdo->query('SELECT id, name, short, color FROM trails ORDER BY sort, id')->fetchAll();
+                $rows = $pdo->query('SELECT id, name, short, color, map_url FROM trails ORDER BY sort, id')->fetchAll();
                 return [200, $rows];
 
             case 'GET points':

@@ -279,6 +279,23 @@ function renderTrails() {
   document.documentElement.style.setProperty('--trail', state.trail.color);
   $('trail-short').textContent = state.trail.short;
   $('trail-name').textContent = `${state.trail.name} – wpisuj kolejne punkty trasy`;
+  // Link do mapy szlaku – tylko adresy https z mapy.com (na telefonie otwiera aplikację Mapy.com, jeśli jest).
+  const map = $('trail-map');
+  const url = safeMapUrl(state.trail.map_url);
+  map.hidden = !url;
+  if (url) {
+    map.href = url;
+    map.setAttribute('aria-label', `Mapa szlaku ${state.trail.short} na mapy.com (otwiera się w nowej karcie)`);
+  }
+}
+
+function safeMapUrl(value) {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'https:' && /(^|\.)mapy\.(com|cz)$/.test(u.hostname) ? u.href : null;
+  } catch {
+    return null;
+  }
 }
 
 // Nazwa punktu bez dopisku w nawiasie – do krótkich nagłówków („Bielsko-Biała (Straconka)” → „Bielsko-Biała”).
