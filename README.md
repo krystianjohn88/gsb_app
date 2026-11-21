@@ -48,6 +48,10 @@ Aplikacja liczy zgodność w procentach (odległość Levenshteina) i zalicza od
 - **Role:** `admin` – wszystko, także konta; `editor` – dodawanie, edycja, przesuwanie (także przeciąganiem) i usuwanie
   punktów; `user` – historia własnych wyników.
 - **Punkty** mają poziom trudności: `łatwy` / `średni` / `trudny`.
+- **Historia zmian (audyt):** tabela `point_history` – kto i kiedy dodał, zmienił (stara → nowa wartość), przesunął
+  (także przeciąganiem – jeden wpis na przeniesiony punkt) albo usunął punkt. W edytorze punktu „🕘 Historia zmian”
+  i autor punktu, na liście w trybie edycji „🕘 Ostatnie zmiany” szlaku (także usunięte punkty). Edytor i administrator.
+- **＋ między kafelkami** w trybie edycji dodaje nowy punkt dokładnie w tym miejscu.
 - **Logowanie:** token w nagłówku `X-Auth-Token`, ważny 30 dni; po 5 złych hasłach konto blokuje się na 15 minut.
 - Bez API (np. lokalnie w Dockerze) aplikacja sama czyta `data/*.json` – tylko nauka, bez kont.
 

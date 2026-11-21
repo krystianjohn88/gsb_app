@@ -600,3 +600,36 @@ details.setting[open] summary { margin-bottom: 8px; }
 .map-dialog .muted:empty { display: none; }
 .map-box .leaflet-tooltip { font-weight: 600; }
 .map-frame { display: block; width: 100%; border: 1px solid var(--border); background: #e8e4da; }
+
+/* Edycja listy: narzędzia i ＋ między kafelkami (nowy punkt dokładnie w tym miejscu) */
+.edit-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.edit-tools .btn { font-size: .9rem; }
+.point-list.editing .group ol { overflow: visible; }
+.point-list.editing .group li { position: relative; padding-top: 13px; padding-bottom: 13px; }
+.insert-btn {
+  position: absolute;
+  left: 50%;
+  bottom: -13px;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--accent);
+  font: 700 15px/1 system-ui, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.insert-btn::after { content: ''; position: absolute; inset: -9px; } /* większy obszar dotyku */
+.insert-btn:hover, .insert-btn:focus-visible { background: var(--accent); color: var(--accent-text); outline: none; }
+.point-list li.dragging .insert-btn { display: none; }
+
+/* Historia zmian punktu */
+.point-history { display: grid; gap: 6px; margin-top: 8px; }
+.point-history h2 { margin: 8px 0 0; }

@@ -69,11 +69,29 @@ function create_schema(): void
             map_url VARCHAR(500) NULL,
             lat DECIMAL(10,7) NULL,
             lon DECIMAL(10,7) NULL,
+            created_at DATETIME NULL,
+            created_by INT NULL,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             updated_by INT NULL,
             INDEX idx_trail_pos (trail_id, position),
             FOREIGN KEY (trail_id) REFERENCES trails(id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
             FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_polish_ci",
+
+        // Historia zmian punktów (audyt). Bez klucza obcego do points – wpisy zostają po usunięciu punktu.
+        "CREATE TABLE IF NOT EXISTS point_history (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            point_id INT NULL,
+            trail_id VARCHAR(20) NOT NULL,
+            user_id INT NULL,
+            action ENUM('import','create','update','move','delete') NOT NULL,
+            label VARCHAR(200) NOT NULL,
+            changes JSON NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_point (point_id, created_at),
+            INDEX idx_trail (trail_id, created_at),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_polish_ci",
 
         "CREATE TABLE IF NOT EXISTS sessions (
@@ -145,6 +163,12 @@ function migrate_schema(): array
     if ($col('points', 'lat') === false) {
         $pdo->exec('ALTER TABLE points ADD COLUMN lat DECIMAL(10,7) NULL AFTER map_url, ADD COLUMN lon DECIMAL(10,7) NULL AFTER lat');
         $done[] = 'points.lat/lon';
+    }
+    // 2026-11-21: autor punktu (created_by / created_at); tabela point_history powstaje w create_schema()
+    if ($col('points', 'created_by') === false) {
+        $pdo->exec('ALTER TABLE points ADD COLUMN created_at DATETIME NULL AFTER lon, ADD COLUMN created_by INT NULL AFTER created_at,
+            ADD CONSTRAINT fk_points_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL');
+        $done[] = 'points.created_at/created_by';
     }
     $file = __DIR__ . '/../../data/trails.json';
     if (is_file($file)) {

@@ -229,6 +229,83 @@ function point_fields(array $b): array
     ];
 }
 
+// --- historia zmian punktów (audyt) ---------------------------------------------------
+// Każda zmiana punktu trafia do point_history: kto, kiedy, co (stara → nowa wartość).
+
+const HISTORY_FIELDS = ['label', 'region', 'type', 'height', 'difficulty', 'map_url', 'lat', 'lon'];
+
+function point_snapshot(array $p): array
+{
+    return [
+        'label' => $p['label'],
+        'region' => $p['region'],
+        'type' => $p['type'],
+        'height' => $p['height'] === null ? null : (int) $p['height'],
+        'difficulty' => $p['difficulty'],
+        'map_url' => $p['map_url'] ?? null,
+        'lat' => isset($p['lat']) ? (float) $p['lat'] : null,
+        'lon' => isset($p['lon']) ? (float) $p['lon'] : null,
+        'position' => (int) $p['position'],
+    ];
+}
+
+function log_point(?int $userId, array $p, string $action, ?array $changes): void
+{
+    db()->prepare(
+        'INSERT INTO point_history (point_id, trail_id, user_id, action, label, changes) VALUES (?, ?, ?, ?, ?, ?)'
+    )->execute([
+        (int) $p['id'], $p['trail_id'], $userId, $action, $p['label'],
+        $changes === null ? null : json_encode($changes, JSON_UNESCAPED_UNICODE),
+    ]);
+}
+
+function history_entries(PDOStatement $st): array
+{
+    return array_map(function ($h) {
+        return [
+            'id' => (int) $h['id'],
+            'point_id' => $h['point_id'] === null ? null : (int) $h['point_id'],
+            'trail' => $h['trail_id'],
+            'action' => $h['action'],
+            'label' => $h['label'],
+            'login' => $h['login'],
+            'changes' => $h['changes'] === null ? null : json_decode($h['changes'], true),
+            'created_at' => $h['created_at'],
+        ];
+    }, $st->fetchAll());
+}
+
+// Historia jednego punktu + kto i kiedy go utworzył.
+function point_history(array $q): array
+{
+    $id = int_field($q, 'id', 1, PHP_INT_MAX);
+    $st = db()->prepare(
+        'SELECT p.created_at, u.login AS created_by FROM points p LEFT JOIN users u ON u.id = p.created_by WHERE p.id = ?'
+    );
+    $st->execute([$id]);
+    $p = $st->fetch() ?: ['created_at' => null, 'created_by' => null];
+    $st = db()->prepare(
+        'SELECT h.*, u.login FROM point_history h LEFT JOIN users u ON u.id = h.user_id
+         WHERE h.point_id = ? ORDER BY h.created_at DESC, h.id DESC LIMIT 200'
+    );
+    $st->execute([$id]);
+    return ['point_id' => $id, 'created_at' => $p['created_at'], 'created_by' => $p['created_by'], 'entries' => history_entries($st)];
+}
+
+// Ostatnie zmiany na szlaku (także usunięte punkty).
+function trail_changes(array $q): array
+{
+    $trail = str_field($q, 'trail', 20);
+    $st = db()->prepare(
+        "SELECT h.*, u.login FROM point_history h LEFT JOIN users u ON u.id = h.user_id
+         WHERE h.trail_id = ? AND h.action <> 'import' ORDER BY h.created_at DESC, h.id DESC LIMIT 150"
+    );
+    $st->execute([$trail]);
+    return history_entries($st);
+}
+
+// --- punkty -------------------------------------------------------------------------
+
 function create_point(array $user, array $b): array
 {
     $pdo = db();
@@ -254,30 +331,47 @@ function create_point(array $user, array $b): array
     $pdo->prepare('UPDATE points SET position = position + 1 WHERE trail_id = ? AND position >= ?')
         ->execute([$trail, $pos]);
     $pdo->prepare(
-        'INSERT INTO points (trail_id, position, region, label, type, height, difficulty, map_url, lat, lon, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO points (trail_id, position, region, label, type, height, difficulty, map_url, lat, lon,
+                             created_at, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)'
     )->execute([$trail, $pos, $f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'], $f['map_url'],
-        $f['coords'][0], $f['coords'][1], $user['id']]);
-    return point_out(find_point((int) $pdo->lastInsertId()));
+        $f['coords'][0], $f['coords'][1], $user['id'], $user['id']]);
+    $new = find_point((int) $pdo->lastInsertId());
+    log_point($user['id'], $new, 'create', point_snapshot($new));
+    return point_out($new);
 }
 
 function update_point(array $user, array $b): array
 {
     $id = int_field($b, 'id', 1, PHP_INT_MAX);
-    find_point($id);
+    $before = find_point($id);
     $f = point_fields($b);
     db()->prepare(
         'UPDATE points SET region = ?, label = ?, type = ?, height = ?, difficulty = ?, map_url = ?, lat = ?, lon = ?,
          updated_by = ? WHERE id = ?'
     )->execute([$f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'], $f['map_url'],
         $f['coords'][0], $f['coords'][1], $user['id'], $id]);
-    return point_out(find_point($id));
+    $after = find_point($id);
+    // Do historii tylko pola, które naprawdę się zmieniły.
+    $old = point_snapshot($before);
+    $new = point_snapshot($after);
+    $diff = [];
+    foreach (HISTORY_FIELDS as $k) {
+        if ($old[$k] !== $new[$k]) {
+            $diff[$k] = [$old[$k], $new[$k]];
+        }
+    }
+    if ($diff) {
+        log_point($user['id'], $after, 'update', $diff);
+    }
+    return point_out($after);
 }
 
-function delete_point(array $b): array
+function delete_point(array $user, array $b): array
 {
     $p = find_point(int_field($b, 'id', 1, PHP_INT_MAX));
     $pdo = db();
+    log_point($user['id'], $p, 'delete', point_snapshot($p));
     $pdo->prepare('DELETE FROM points WHERE id = ?')->execute([$p['id']]);
     $pdo->prepare('UPDATE points SET position = position - 1 WHERE trail_id = ? AND position > ?')
         ->execute([$p['trail_id'], $p['position']]);
@@ -305,7 +399,38 @@ function move_point(array $user, array $b): array
     $upd = db()->prepare('UPDATE points SET position = ?, updated_by = ? WHERE id = ?');
     $upd->execute([$other['position'], $user['id'], $p['id']]);
     $upd->execute([$p['position'], $user['id'], $other['id']]);
+    log_point($user['id'], $p, 'move', ['position' => [(int) $p['position'], (int) $other['position']]]);
     return point_out(find_point((int) $p['id']));
+}
+
+// Które punkty „przeniesiono” przy nowej kolejności: wszystkie poza najdłuższym podciągiem,
+// który zachował dotychczasową kolejność (przeciągnięcie jednego kafelka = jeden wpis w historii).
+function moved_point_ids(array $newIds, array $oldPos): array
+{
+    $seq = array_map(function ($id) use ($oldPos) { return $oldPos[$id]; }, $newIds);
+    $tails = [];
+    $tailIdx = [];
+    $prev = [];
+    foreach ($seq as $i => $v) {
+        $lo = 0;
+        $hi = count($tails);
+        while ($lo < $hi) {
+            $mid = intdiv($lo + $hi, 2);
+            if ($tails[$mid] < $v) {
+                $lo = $mid + 1;
+            } else {
+                $hi = $mid;
+            }
+        }
+        $tails[$lo] = $v;
+        $tailIdx[$lo] = $i;
+        $prev[$i] = $lo > 0 ? $tailIdx[$lo - 1] : -1;
+    }
+    $keep = [];
+    for ($i = $tails ? $tailIdx[count($tails) - 1] : -1; $i >= 0; $i = $prev[$i]) {
+        $keep[$newIds[$i]] = true;
+    }
+    return array_values(array_filter($newIds, function ($id) use ($keep) { return !isset($keep[$id]); }));
 }
 
 // Nowa kolejność całego szlaku (po przeciąganiu kafelków): ids = wszystkie punkty szlaku
@@ -319,15 +444,22 @@ function reorder_points(array $user, array $b): array
         fail(422, 'Brak listy punktów.');
     }
     $ids = array_map('intval', $ids);
-    $st = $pdo->prepare('SELECT id FROM points WHERE trail_id = ?');
+    $st = $pdo->prepare('SELECT * FROM points WHERE trail_id = ?');
     $st->execute([$trail]);
-    $current = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    $rows = [];
+    foreach ($st->fetchAll() as $r) {
+        $rows[(int) $r['id']] = $r;
+    }
+    $current = array_keys($rows);
     $sortedNew = $ids;
     sort($sortedNew);
     sort($current);
     if ($sortedNew !== $current) {
         fail(409, 'Lista punktów się zmieniła (ktoś inny edytował szlak?) – odśwież i spróbuj ponownie.');
     }
+    $oldPos = array_map(function ($r) { return (int) $r['position']; }, $rows);
+    $moved = moved_point_ids($ids, $oldPos);
+    $newPos = array_flip($ids);
     $ownTx = !$pdo->inTransaction();
     if ($ownTx) {
         $pdo->beginTransaction();
@@ -336,6 +468,9 @@ function reorder_points(array $user, array $b): array
         $upd = $pdo->prepare('UPDATE points SET position = ?, updated_by = ? WHERE id = ? AND position <> ?');
         foreach ($ids as $i => $id) {
             $upd->execute([$i + 1, $user['id'], $id, $i + 1]);
+        }
+        foreach ($moved as $id) {
+            log_point($user['id'], $rows[$id], 'move', ['position' => [$oldPos[$id], $newPos[$id] + 1]]);
         }
         if ($ownTx) {
             $pdo->commit();
@@ -346,7 +481,7 @@ function reorder_points(array $user, array $b): array
         }
         throw $e;
     }
-    return ['trail' => $trail, 'count' => count($ids)];
+    return ['trail' => $trail, 'count' => count($ids), 'moved' => count($moved)];
 }
 
 // --- konta --------------------------------------------------------------------------
@@ -580,7 +715,13 @@ function handle_request(string $method, string $route, array $query, array $body
                 return [200, update_point(require_role($me, ['admin', 'editor']), $body)];
             case 'DELETE points':
                 require_role($me, ['admin', 'editor']);
-                return [200, delete_point($body)];
+                return [200, delete_point($me, $body)];
+            case 'GET point_history':
+                require_role($me, ['admin', 'editor']);
+                return [200, point_history($query)];
+            case 'GET changes':
+                require_role($me, ['admin', 'editor']);
+                return [200, trail_changes($query)];
             case 'POST points_move':
                 return [200, move_point(require_role($me, ['admin', 'editor']), $body)];
             case 'POST points_reorder':

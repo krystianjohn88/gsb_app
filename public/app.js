@@ -590,7 +590,7 @@ async function showList({ keepScroll = false } = {}) {
   $('list-edit').hidden = !canEdit();
   $('list-edit').setAttribute('aria-pressed', String(state.editing));
   $('list-edit').textContent = state.editing ? '✓ Gotowe' : '✏️ Edytuj';
-  $('list-add-first').hidden = !state.editing;
+  $('list-edit-tools').hidden = !state.editing;
   $('drag-hint').hidden = !state.editing;
   setOrderDirty(false);
 
@@ -647,6 +647,23 @@ async function showList({ keepScroll = false } = {}) {
         openEditor(p);
       });
       li.addEventListener('pointerdown', onDragDown);
+      // ＋ na krawędzi pod kafelkiem: nowy punkt dokładnie w tym miejscu (między tym a następnym).
+      const ins = document.createElement('button');
+      ins.type = 'button';
+      ins.className = 'insert-btn';
+      ins.textContent = '＋';
+      ins.title = 'Dodaj punkt tutaj';
+      ins.setAttribute('aria-label', `Dodaj punkt po: ${p.label}`);
+      ins.addEventListener('pointerdown', (e) => e.stopPropagation());
+      ins.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.orderDirty) {
+          setListMessage('Najpierw zapisz albo anuluj nową kolejność.');
+          return;
+        }
+        addPointAfter(p);
+      });
+      li.appendChild(ins);
     }
     group.list.appendChild(li);
   });
@@ -897,6 +914,7 @@ function openEditor(point, { afterId = null, insertAt = null, region = null } = 
   $('edit-coords').value = !isNew && Number.isFinite(point.lat) && Number.isFinite(point.lon)
     ? `${point.lat}, ${point.lon}` : '';
   document.querySelectorAll('.edit-existing').forEach((el) => { el.hidden = isNew; });
+  if (!isNew) loadPointHistory(point.id);
   setEditMessage('', '');
   show('edit');
   $('edit-label').focus({ preventScroll: true });
@@ -977,11 +995,103 @@ function movePoint(visualDir) {
 
 $('edit-up').addEventListener('click', () => movePoint(-1));
 $('edit-down').addEventListener('click', () => movePoint(1));
-$('edit-add-after').addEventListener('click', () => {
-  const p = state.edit.point;
+// Nowy punkt zaraz po wskazanym (w kolejności na ekranie – także przy odwróconym kierunku).
+function addPointAfter(p) {
   const afterId = afterIdFor(p);
   openEditor(null, { afterId, insertAt: afterId ? null : 'start', region: p.name_mountain_part });
-});
+}
+
+$('edit-add-after').addEventListener('click', () => addPointAfter(state.edit.point));
+
+// --- historia zmian punktów ---------------------------------------------------------------
+
+const ACTION_LABEL = {
+  import: '📥 zaimportowany', create: '➕ dodany', update: '✏️ zmieniony', move: '↕️ przesunięty', delete: '🗑 usunięty',
+};
+const FIELD_LABEL = {
+  label: 'nazwa', region: 'pasmo', type: 'typ', height: 'wysokość', difficulty: 'trudność',
+  map_url: 'mapa', lat: 'szer.', lon: 'dł.', position: 'pozycja',
+};
+
+function fmtValue(key, v) {
+  if (v === null || v === undefined || v === '') return '—';
+  if (key === 'map_url') return '🗺️ link';
+  if (key === 'height') return `${v} m`;
+  return String(v);
+}
+
+function changeLines(h) {
+  const c = h.changes || {};
+  if (h.action === 'update' || h.action === 'move') {
+    return Object.entries(c).map(([k, [a, b]]) => `${FIELD_LABEL[k] || k}: ${fmtValue(k, a)} → ${fmtValue(k, b)}`);
+  }
+  if (h.action === 'create' || h.action === 'delete') {
+    return [['type', 'height', 'region', 'difficulty', 'position'].filter((k) => c[k] !== null && c[k] !== undefined)
+      .map((k) => `${FIELD_LABEL[k]}: ${fmtValue(k, c[k])}`).join(' · ')];
+  }
+  return [];
+}
+
+// Wpisy historii; withPoint = pokaż nazwę punktu (lista zmian całego szlaku).
+function renderHistoryEntries(box, entries, { withPoint = false } = {}) {
+  box.innerHTML = '';
+  if (!entries.length) {
+    box.innerHTML = '<li class="muted">Brak zapisanych zmian.</li>';
+    return;
+  }
+  for (const h of entries) {
+    const li = document.createElement('li');
+    const head = document.createElement('div');
+    head.className = 'h-head';
+    const what = document.createElement('strong');
+    what.textContent = withPoint ? `${ACTION_LABEL[h.action] || h.action}: ${h.label}` : (ACTION_LABEL[h.action] || h.action);
+    const when = document.createElement('small');
+    when.textContent = formatDate(h.created_at);
+    head.append(what, when);
+    const body = document.createElement('div');
+    body.className = 'h-body';
+    const lines = [`przez: ${h.login || '(usunięte konto)'}`, ...changeLines(h)].filter(Boolean);
+    body.textContent = lines.join(' · ');
+    li.append(head, body);
+    box.appendChild(li);
+  }
+}
+
+async function loadPointHistory(pointId) {
+  const box = $('edit-history');
+  $('edit-created').textContent = '';
+  box.innerHTML = '<li class="muted">Wczytywanie…</li>';
+  try {
+    const h = await api('point_history', { query: { id: pointId } });
+    if (!state.edit || !state.edit.point || state.edit.point.id !== pointId) return; // otwarto już inny punkt
+    $('edit-created').textContent = `Utworzył(a): ${h.created_by || 'nieznany'} · ${h.created_at ? formatDate(h.created_at) : 'data nieznana'}`;
+    renderHistoryEntries(box, h.entries);
+  } catch (err) {
+    box.innerHTML = '';
+    $('edit-created').textContent = `Nie udało się wczytać historii: ${err.message}`;
+  }
+}
+
+async function showChanges() {
+  if (state.orderDirty) {
+    setListMessage('Najpierw zapisz albo anuluj nową kolejność.');
+    return;
+  }
+  $('changes-title').textContent = `🕘 Ostatnie zmiany · ${state.trail.short}`;
+  $('changes-sub').textContent = 'Wczytywanie…';
+  show('changes');
+  try {
+    const entries = await api('changes', { query: { trail: state.trail.id } });
+    renderHistoryEntries($('changes-list'), entries, { withPoint: true });
+    $('changes-sub').textContent = entries.length ? `wpisów: ${entries.length} (najnowsze na górze)` : '';
+  } catch (err) {
+    $('changes-list').innerHTML = '';
+    $('changes-sub').textContent = `✗ ${err.message}`;
+  }
+}
+
+$('list-changes').addEventListener('click', showChanges);
+$('changes-back').addEventListener('click', () => showList({ keepScroll: true }));
 $('edit-delete').addEventListener('click', () => {
   const p = state.edit.point;
   if (!confirm(`Usunąć punkt „${p.label}”? Tego nie da się cofnąć.`)) return;

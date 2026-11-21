@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=19">
+  <link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body>
   <!-- Ekran startowy: wybór zakresu nauki -->
@@ -96,7 +96,10 @@
       <input id="list-search" type="search" placeholder="Szukaj punktu…" autocomplete="off"
              autocorrect="off" spellcheck="false" enterkeyhint="search">
       <p id="list-message" class="feedback ok" hidden></p>
-      <button id="list-add-first" class="btn" type="button" hidden>＋ Dodaj punkt na początku szlaku</button>
+      <div id="list-edit-tools" class="edit-tools" hidden>
+        <button id="list-add-first" class="btn" type="button">＋ Dodaj na początku</button>
+        <button id="list-changes" class="btn" type="button">🕘 Ostatnie zmiany</button>
+      </div>
       <p id="drag-hint" class="muted" hidden>Dotknij punktu, aby go edytować. Aby przenieść: przeciągnij myszką,
         a na telefonie przytrzymaj kafelek, aż zmieni kolor, i przesuń palcem.</p>
     </div>
@@ -142,6 +145,23 @@
       <button id="edit-delete" class="btn danger edit-existing" type="button">🗑 Usuń punkt</button>
       <button id="edit-cancel" class="btn" type="button">Anuluj</button>
     </form>
+    <section class="point-history edit-existing">
+      <h2>🕘 Historia zmian</h2>
+      <p id="edit-created" class="muted"></p>
+      <ol id="edit-history" class="history"></ol>
+    </section>
+  </section>
+
+  <!-- Ostatnie zmiany punktów na szlaku (edytor, administrator) -->
+  <section id="screen-changes" class="screen">
+    <header class="bar">
+      <button id="changes-back" class="icon-btn" type="button" aria-label="Wróć do listy punktów">←</button>
+      <div class="bar-title">
+        <strong id="changes-title">🕘 Ostatnie zmiany</strong>
+        <span id="changes-sub"></span>
+      </div>
+    </header>
+    <ol id="changes-list" class="history"></ol>
   </section>
 
   <!-- Logowanie -->
@@ -328,6 +348,6 @@
     <a id="map-open" class="btn primary map-open" href="#" target="_blank" rel="noopener">Otwórz w mapy.com ↗</a>
   </dialog>
 
-  <script src="app.js?v=21"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>
