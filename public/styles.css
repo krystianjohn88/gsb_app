@@ -628,7 +628,11 @@ details.setting[open] summary { margin-bottom: 8px; }
 }
 .insert-btn::after { content: ''; position: absolute; inset: -9px; } /* większy obszar dotyku */
 .insert-btn:hover, .insert-btn:focus-visible { background: var(--accent); color: var(--accent-text); outline: none; }
-.point-list li.dragging .insert-btn { display: none; }
+/* Podczas przeciągania: przeciągany kafelek „wisi” nad listą (fixed – musi wygrać z position: relative
+   z trybu edycji), a wszystkie ＋ chowamy, żeby nie przesuwały się razem z listą. */
+.point-list.editing .group li.dragging { position: fixed; }
+.point-list.editing .group li.drop-placeholder { padding: 0; }
+body.drag-active .insert-btn { display: none; }
 
 /* Historia zmian punktu */
 .point-history { display: grid; gap: 6px; margin-top: 8px; }
