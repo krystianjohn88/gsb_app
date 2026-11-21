@@ -1,57 +1,85 @@
-# Szlaki długodystansowe Beskidów (GSB, MSB, NSK, TWR)
+# Szlaki długodystansowe Beskidów
 
-Aplikacja na telefon (PWA) do nauki kolejnych punktów szlaków: wpisujesz po kolei nazwy punktów –
-cały szlak albo wybrany region, w obu kierunkach.
+Aplikacja na telefon do nauki kolejnych punktów szlaków górskich – cały szlak albo wybrane pasmo, w obu kierunkach.
+
+**Działa tutaj:** https://szlaki.kj88.pl
 
 - **GSB** – Główny Szlak Beskidzki (Ustroń ↔ Wołosate)
 - **MSB** – Mały Szlak Beskidzki (Bielsko-Biała ↔ Luboń Wielki)
 - **NSK** – Niebieski Szlak Karpacki (Grybów ↔ Rzeszów)
 - **TWR** – Niebieski szlak turystyczny Tarnów – Wielki Rogacz
 
-Czysty JS, zero zależności npm. Serwer: `server.js` (Node 22), frontend: `public/`
-(ten sam co w statycznej wersji [longMountainPath](https://github.com/krystianjohn88/longMountainPath)).
+Czysty JS po stronie przeglądarki, PHP 8 + MySQL na serwerze, zero zależności.
 
-## Uruchomienie
+## Struktura
 
-```powershell
-docker compose up --build
 ```
-
-Potem http://localhost:3000 (na telefonie w tej samej sieci: `http://<IP-komputera>:3000`).
-
-Bez Dockera: `node server.js`.
-
-## Baza danych – `data/`
-
-- `trails.json` – lista szlaków: `id`, `name`, `short`, `color` (kolor znakowania), `file`
-- `gsb.json`, `msb.json`, `nsk.json`, `twr.json` – punkty szlaku w kolejności (wg `id`):
-
-```json
-{ "id": 1, "name_mountain_part": "Beskid Niski", "label": "Chełm", "typ_punktu": "góra", "height": 778 }
+public/                 = katalog /szlaki na serwerze (szlaki.kj88.pl), 1:1
+  index.html, app.js, styles.css, manifest.webmanifest, icon.svg
+  data/*.json           punkty szlaków (import do bazy i tryb bez bazy)
+  api/index.php         wejście API: /api/?r=<trasa>
+  private/              kod PHP i konfiguracja – zablokowane przez .htaccess
+    lib/db.php, lib/api.php
+    config.example.php  wzór → na serwerze jako config.php (poza gitem!)
+  setup.php             instalacja: tabele, import, pierwszy administrator
+server.js, Dockerfile   lokalnie w Dockerze, tylko nauka (bez bazy)
 ```
-
-`typ_punktu`: `góra` | `przełęcz` | `schronisko` | `miasto` | `polana` | `inne`.
-`height` (m n.p.m.) jest opcjonalne – pokazuje się w podpowiedzi.
-
-Folder jest podmontowany do kontenera i czytany przy każdym żądaniu – po edycji wystarczy odświeżyć stronę.
-
 
 ## Tryby nauki
 
-- **✍️ Wpisywanie**: wpisujesz kolejne punkty (cały szlak albo pasmo).
-- **🧩 Układanie**: tylko dla pasm. Układasz etapami po kilka punktów (domyślnie 8, zmiana przyciskami −/+ od 3 do 20): na dole wymieszane klocki z nazwami, dotykasz je w kolejności szlaku. Każdy jest od razu sprawdzany – dobry trafia na swoje miejsce (zielony), zły miga na czerwono i liczy się jako pomyłka. Po ułożeniu etapu pojawiają się kolejne klocki.
+- **✍️ Wpisywanie** – wpisujesz kolejne punkty (cały szlak albo pasmo).
+- **🧩 Układanie** – tylko dla pasm. Etapami po kilka punktów (domyślnie 8, −/+ od 3 do 20): dotykasz wymieszane
+  klocki w kolejności szlaku, każdy jest od razu sprawdzany.
+- **↕️ Pomiędzy** – losowe miejsce na szlaku (albo w paśmie): dwa sąsiednie punkty, wpisujesz ten pomiędzy. 10 pytań.
+
+**Poziom trudności:** Łatwy – tylko łatwe punkty, Średni – łatwe i średnie, Trudny – wszystkie. Dotyczy wszystkich trybów;
+lista „Przeglądaj punkty” zawsze pokazuje wszystko.
+
+**Odpowiedź głosem** (🎤) – gdy przeglądarka rozpoznaje mowę i wykryto mikrofon; tylko na HTTPS.
 
 ## Sprawdzanie odpowiedzi
 
 Nie liczą się polskie znaki, wielkość liter ani myślniki. Przedrostki „Przełęcz”, „Hala”, „Schronisko PTTK”,
 „Stacja Turystyczna” można pominąć, a nazwę z dopiskiem w nawiasie można wpisać bez nawiasu albo samym dopiskiem.
+Aplikacja liczy zgodność w procentach (odległość Levenshteina) i zalicza od 80% – próg zmienia suwak na ekranie startowym.
 
-**Zgodność odpowiedzi:** aplikacja liczy, w ilu procentach wpisana nazwa zgadza się z poprawną (odległość Levenshteina)
-i pokazuje ten wynik. Odpowiedź jest zaliczana od 80% – próg można zmienić suwakiem na ekranie startowym.
+## Konta i edycja (PHP + MySQL)
 
-## API
+- **Role:** `admin` – wszystko, także konta; `editor` – dodawanie, edycja, przesuwanie (także przeciąganiem) i usuwanie
+  punktów; `user` – historia własnych wyników.
+- **Punkty** mają poziom trudności: `łatwy` / `średni` / `trudny`.
+- **Logowanie:** token w nagłówku `X-Auth-Token`, ważny 30 dni; po 5 złych hasłach konto blokuje się na 15 minut.
+- Bez API (np. lokalnie w Dockerze) aplikacja sama czyta `data/*.json` – tylko nauka, bez kont.
 
-- `GET /data/<plik>.json` – pliki z `data/` (z nich korzysta frontend)
-- `GET /api/trails` – lista szlaków
-- `GET /api/points?trail=nsk` – punkty szlaku (domyślnie pierwszy z `trails.json`), opcjonalnie `&part=Bieszczady`
-- `GET /api/parts?trail=nsk` – regiony w kolejności szlaku z liczbą punktów
+### Instalacja na nowym serwerze
+
+1. Wgraj zawartość `public/` na serwer.
+2. Skopiuj `private/config.example.php` jako `private/config.php` i uzupełnij dane bazy (na home.pl host to `mysql8`).
+3. Otwórz `setup.php` (najlepiej przez HTTPS): tworzy tabele, importuje szlaki z `data/*.json`, zakłada pierwszego
+   administratora. Potem usuń `setup.php` z serwera.
+
+### Wdrażanie zmian
+
+Wgraj zmienione pliki z `public/` do `/szlaki` (WinSCP). **Nigdy nie nadpisuj `private/config.php`.**
+Po każdej zmianie `app.js` lub `styles.css` podbij numer `?v=` w `index.html` – inaczej przeglądarka może przez kilka
+minut łączyć nową stronę ze starym skryptem z pamięci podręcznej.
+
+## Dane – `public/data/`
+
+- `trails.json` – szlaki: `id`, `name`, `short`, `color` (kolor znakowania), `file`
+- `gsb.json`, `msb.json`, `nsk.json`, `twr.json` – punkty w kolejności (wg `id`):
+
+```json
+{ "id": 1, "name_mountain_part": "Beskid Niski", "label": "Chełm", "typ_punktu": "góra", "height": 778 }
+```
+
+`typ_punktu`: `góra` | `przełęcz` | `schronisko` | `miasto` | `polana` | `inne`; `height` (m n.p.m.) opcjonalne.
+Pliki służą do pierwszego importu i do trybu bez bazy – po imporcie punkty edytuje się w aplikacji (baza).
+
+## Lokalnie w Dockerze (bez bazy)
+
+```powershell
+docker compose up --build
+```
+
+http://localhost:3000 – nauka na danych z `public/data/*.json`. Kod PHP i `private/` nie są udostępniane.

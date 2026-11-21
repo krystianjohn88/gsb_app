@@ -1,2 +1,4 @@
 node_modules
 .DS_Store
+# Hasło do bazy – tylko na serwerze, nigdy w repozytorium
+public/private/config.php

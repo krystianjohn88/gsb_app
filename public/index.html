@@ -12,11 +12,14 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body>
   <!-- Ekran startowy: wybór zakresu nauki -->
   <section id="screen-start" class="screen active">
+    <div id="account-bar" class="account-bar" hidden>
+      <button id="account-btn" class="pill small" type="button">👤 Zaloguj się</button>
+    </div>
     <p class="app-name">Szlaki długodystansowe Beskidów</p>
     <div id="trails" class="trails" role="group" aria-label="Szlak"></div>
 
@@ -33,6 +36,17 @@
     <div class="modes" role="group" aria-label="Tryb nauki">
       <button class="mode" type="button" data-mode="type">✍️ Wpisywanie</button>
       <button class="mode" type="button" data-mode="order">🧩 Układanie</button>
+      <button class="mode" type="button" data-mode="between">↕️ Pomiędzy</button>
+    </div>
+
+    <div class="setting level-setting">
+      <span>Poziom trudności</span>
+      <div class="levels" role="group" aria-label="Poziom trudności">
+        <button class="level" type="button" data-level="łatwy"><span class="diff diff-latwy"></span> Łatwy</button>
+        <button class="level" type="button" data-level="średni"><span class="diff diff-sredni"></span> Średni</button>
+        <button class="level" type="button" data-level="trudny"><span class="diff diff-trudny"></span> Trudny</button>
+      </div>
+      <small id="level-info"></small>
     </div>
 
     <div id="threshold-setting" class="setting">
@@ -50,6 +64,10 @@
       <small>Dotykaj klocków z nazwami w kolejności szlaku – każdy jest od razu sprawdzany.
         Po ułożeniu etapu pojawiają się kolejne. Tryb dostępny dla pojedynczych pasm.</small>
     </div>
+    <p id="between-info" class="setting order-info" hidden>
+      <small>Losuję miejsce na szlaku i pokazuję dwa sąsiednie punkty – wpisz ten, który jest pomiędzy nimi.
+        10 pytań z całego szlaku albo z wybranego pasma.</small>
+    </p>
 
     <button id="start-all" class="btn primary big" type="button">Cały szlak od początku</button>
     <button id="browse" class="btn big" type="button">📋 Przeglądaj punkty</button>
@@ -67,11 +85,109 @@
           <strong id="list-title"></strong>
           <span id="list-count"></span>
         </div>
+        <button id="list-edit" class="pill small" type="button" hidden>✏️ Edytuj</button>
       </header>
+      <div id="order-bar" class="order-bar" hidden>
+        <span>Nowa kolejność – niezapisana</span>
+        <button id="order-cancel" class="btn" type="button">Anuluj</button>
+        <button id="order-save" class="btn primary" type="button">💾 Zapisz kolejność</button>
+      </div>
       <input id="list-search" type="search" placeholder="Szukaj punktu…" autocomplete="off"
              autocorrect="off" spellcheck="false" enterkeyhint="search">
+      <p id="list-message" class="feedback ok" hidden></p>
+      <button id="list-add-first" class="btn" type="button" hidden>＋ Dodaj punkt na początku szlaku</button>
+      <p id="drag-hint" class="muted" hidden>Dotknij punktu, aby go edytować. Aby przenieść: przeciągnij myszką,
+        a na telefonie przytrzymaj kafelek, aż zmieni kolor, i przesuń palcem.</p>
     </div>
     <div id="point-list" class="point-list"></div>
+  </section>
+
+  <!-- Edycja punktu (edytor, administrator) -->
+  <section id="screen-edit" class="screen">
+    <header class="bar">
+      <button id="edit-back" class="icon-btn" type="button" aria-label="Wróć">←</button>
+      <div class="bar-title">
+        <strong id="edit-title">Edycja punktu</strong>
+        <span id="edit-sub"></span>
+      </div>
+    </header>
+    <form id="edit-form" class="form" autocomplete="off">
+      <label>Nazwa <input id="edit-label" required maxlength="200"></label>
+      <label>Pasmo / region <input id="edit-region" required maxlength="100" list="edit-regions"></label>
+      <datalist id="edit-regions"></datalist>
+      <div class="form-row">
+        <label>Typ <select id="edit-type"></select></label>
+        <label>Wysokość (m) <input id="edit-height" type="number" min="0" max="3000" inputmode="numeric"></label>
+      </div>
+      <label>Poziom trudności <select id="edit-difficulty"></select></label>
+      <p id="edit-message" class="feedback" aria-live="polite"></p>
+      <button class="btn primary big" type="submit">💾 Zapisz</button>
+      <div class="actions edit-existing">
+        <button id="edit-up" class="btn" type="button">↑ Wyżej</button>
+        <button id="edit-down" class="btn" type="button">↓ Niżej</button>
+      </div>
+      <button id="edit-add-after" class="btn edit-existing" type="button">＋ Dodaj punkt po tym</button>
+      <button id="edit-delete" class="btn danger edit-existing" type="button">🗑 Usuń punkt</button>
+      <button id="edit-cancel" class="btn" type="button">Anuluj</button>
+    </form>
+  </section>
+
+  <!-- Logowanie -->
+  <section id="screen-login" class="screen">
+    <header class="bar">
+      <button id="login-back" class="icon-btn" type="button" aria-label="Wróć">←</button>
+      <div class="bar-title"><strong>Logowanie</strong></div>
+    </header>
+    <form id="login-form" class="form">
+      <label>Login <input id="login-login" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+      <label>Hasło <input id="login-password" type="password" required autocomplete="current-password"></label>
+      <p id="login-https" class="feedback revealed" hidden>⚠️ Połączenie nie jest szyfrowane (HTTP) – hasło idzie jawnym tekstem.</p>
+      <p id="login-error" class="feedback bad" aria-live="polite"></p>
+      <button id="login-submit" class="btn primary big" type="submit">Zaloguj</button>
+      <small class="muted">Konta zakłada administrator.</small>
+    </form>
+  </section>
+
+  <!-- Konto: historia wyników, zmiana hasła -->
+  <section id="screen-account" class="screen">
+    <header class="bar">
+      <button id="account-back" class="icon-btn" type="button" aria-label="Wróć">←</button>
+      <div class="bar-title">
+        <strong id="account-login"></strong>
+        <span id="account-role"></span>
+      </div>
+    </header>
+    <button id="account-users" class="btn" type="button" hidden>👥 Użytkownicy</button>
+    <h2>📈 Moje wyniki</h2>
+    <ol id="history" class="history"></ol>
+    <details class="setting">
+      <summary>🔑 Zmień hasło</summary>
+      <form id="pw-form" class="form">
+        <label>Obecne hasło <input id="pw-current" type="password" required autocomplete="current-password"></label>
+        <label>Nowe hasło (min. 8 znaków) <input id="pw-new" type="password" required minlength="8" autocomplete="new-password"></label>
+        <label>Powtórz nowe hasło <input id="pw-new2" type="password" required minlength="8" autocomplete="new-password"></label>
+        <p id="pw-message" class="feedback" aria-live="polite"></p>
+        <button class="btn primary" type="submit">Zmień hasło</button>
+      </form>
+    </details>
+    <button id="account-logout" class="btn" type="button">Wyloguj się</button>
+  </section>
+
+  <!-- Użytkownicy (administrator) -->
+  <section id="screen-users" class="screen">
+    <header class="bar">
+      <button id="users-back" class="icon-btn" type="button" aria-label="Wróć">←</button>
+      <div class="bar-title"><strong>👥 Użytkownicy</strong></div>
+    </header>
+    <p id="users-message" class="feedback" aria-live="polite"></p>
+    <ul id="users-list" class="users"></ul>
+    <form id="new-user-form" class="form setting" autocomplete="off">
+      <strong>Nowe konto</strong>
+      <label>Login <input id="new-login" required minlength="3" maxlength="50" autocapitalize="none" spellcheck="false"></label>
+      <label>Hasło (min. 8 znaków) <input id="new-password" type="password" required minlength="8" autocomplete="new-password"></label>
+      <label>Rola <select id="new-role"></select></label>
+      <button class="btn primary" type="submit">＋ Załóż konto</button>
+    </form>
   </section>
 
   <!-- Ekran nauki -->
@@ -90,8 +206,11 @@
     <form id="answer-form" class="answer" autocomplete="off">
       <p id="feedback" class="feedback" aria-live="polite"></p>
       <p id="hint" class="hint"></p>
-      <input id="answer" type="text" placeholder="Następny punkt…" enterkeyhint="go"
-             autocapitalize="words" autocorrect="off" spellcheck="false">
+      <div class="input-row">
+        <input id="answer" type="text" placeholder="Następny punkt…" enterkeyhint="go"
+               autocapitalize="words" autocorrect="off" spellcheck="false">
+        <button class="icon-btn mic" type="button" data-for="answer" aria-label="Powiedz odpowiedź" hidden>🎤</button>
+      </div>
       <div class="actions">
         <button id="btn-hint" class="btn" type="button">Podpowiedź</button>
         <button id="btn-reveal" class="btn" type="button">Pokaż</button>
@@ -100,7 +219,41 @@
     </form>
   </section>
 
-  <!-- Układanie punktów pasma w kolejności -->
+  <!-- Pomiędzy: dwa punkty, wpisz ten w środku -->
+  <section id="screen-between" class="screen quiz">
+    <header class="bar">
+      <button id="between-back" class="icon-btn" type="button" aria-label="Wróć">←</button>
+      <div class="bar-title">
+        <strong id="between-title"></strong>
+        <span id="between-progress"></span>
+      </div>
+    </header>
+    <div class="progress"><div id="between-fill"></div></div>
+
+    <div class="between-card">
+      <div id="b-prev" class="b-point"></div>
+      <div class="b-arrow" aria-hidden="true">↓</div>
+      <div id="b-mid" class="b-point b-mid">?</div>
+      <div class="b-arrow" aria-hidden="true">↓</div>
+      <div id="b-next" class="b-point"></div>
+    </div>
+
+    <form id="between-form" class="answer" autocomplete="off">
+      <p id="b-feedback" class="feedback" aria-live="polite"></p>
+      <p id="b-hint" class="hint"></p>
+      <div class="input-row">
+        <input id="b-answer" type="text" placeholder="Co jest pomiędzy?" enterkeyhint="go"
+               autocapitalize="words" autocorrect="off" spellcheck="false">
+        <button class="icon-btn mic" type="button" data-for="b-answer" aria-label="Powiedz odpowiedź" hidden>🎤</button>
+      </div>
+      <div class="actions">
+        <button id="b-btn-hint" class="btn" type="button">Podpowiedź</button>
+        <button id="b-btn-reveal" class="btn" type="button">Pokaż</button>
+        <button class="btn primary" type="submit">Sprawdź</button>
+      </div>
+    </form>
+  </section>
+
   <section id="screen-order" class="screen quiz">
     <header class="bar">
       <button id="order-back" class="icon-btn" type="button" aria-label="Wróć">←</button>
@@ -129,11 +282,12 @@
     <header class="hero">
       <h1>Koniec!</h1>
       <p id="summary"></p>
+      <p id="summary-note" class="muted"></p>
     </header>
     <button id="again" class="btn primary big" type="button">Jeszcze raz</button>
     <button id="home" class="btn big" type="button">Menu</button>
   </section>
 
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>

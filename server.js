@@ -1,12 +1,13 @@
-// Prosty serwer HTTP bez zależności: serwuje frontend z ./public
-// oraz „bazę danych” z plików JSON w ./data (trails.json + plik punktów każdego szlaku).
+// Lokalny serwer (Node, bez zależności) do nauki bez bazy danych: serwuje stronę z ./public
+// i punkty z plików JSON w ./public/data. Logowanie, edycja i historia wyników działają tylko
+// w wersji PHP + MySQL (szlaki.kj88.pl) – tu aplikacja sama przełącza się na pliki JSON.
 const http = require('node:http');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(PUBLIC_DIR, 'data');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -76,6 +77,10 @@ async function handleStatic(res, pathname) {
   const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
   const file = path.normalize(path.join(PUBLIC_DIR, rel));
   if (!file.startsWith(PUBLIC_DIR)) return send(res, 403, 'Forbidden');
+  // Kod PHP i katalog private/ (konfiguracja bazy) nie są udostępniane – Node nie wykonuje PHP.
+  if (file.startsWith(path.join(PUBLIC_DIR, 'private')) || path.extname(file) === '.php') {
+    return send(res, 404, 'Not found');
+  }
   try {
     const body = await fs.readFile(file);
     send(res, 200, body, MIME[path.extname(file)] || 'application/octet-stream');

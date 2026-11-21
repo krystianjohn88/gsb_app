@@ -10,11 +10,20 @@ const DEFAULT_THRESHOLD = 80;
 const THRESHOLD_KEY = 'gsb.threshold';
 const TRAIL_KEY = 'gsb.trail';
 const MODE_KEY = 'gsb.mode';
+const TOKEN_KEY = 'gsb.token';
+const ROLE_LABEL = { admin: 'Administrator', editor: 'Edytor', user: 'Użytkownik' };
+const DIFFICULTIES = ['łatwy', 'średni', 'trudny'];
+const TYPES = Object.keys(TYPE_ICON);
 
 const $ = (id) => document.getElementById(id);
 
 const state = {
-  trails: [],        // lista szlaków z data/trails.json
+  api: false,        // true = dane z API (szlaki.kj88.pl), false = pliki JSON (GitHub Pages)
+  token: loadToken(),
+  user: null,        // zalogowany użytkownik {id, login, role}
+  editing: false,    // tryb edycji na liście punktów
+  startedAt: 0,      // początek bieżącej sesji nauki (do zapisu wyniku)
+  trails: [],        // lista szlaków
   trail: null,       // wybrany szlak
   reversed: false,   // false: kierunek jak w pliku (wg id), true: odwrotnie
   part: null,        // null = cały szlak
@@ -25,7 +34,8 @@ const state = {
   revealed: 0,
   close: 0,          // zaliczone z literówką (zgodność < 100%)
   threshold: loadThreshold(),
-  mode: loadMode(),  // 'type' – wpisywanie, 'order' – układanie klocków (tylko pasma)
+  mode: loadMode(),  // 'type' – wpisywanie, 'order' – układanie klocków (tylko pasma), 'between' – pomiędzy
+  level: loadLevel(), // poziom trudności nauki
   order: null,       // stan układanki
 };
 
@@ -52,12 +62,44 @@ function saveTrailId(id) {
 }
 
 function loadMode() {
-  try { return localStorage.getItem(MODE_KEY) === 'order' ? 'order' : 'type'; } catch { return 'type'; }
+  try {
+    const m = localStorage.getItem(MODE_KEY);
+    return ['order', 'between'].includes(m) ? m : 'type';
+  } catch { return 'type'; }
 }
+
+// Poziom trudności nauki: łatwy = tylko łatwe punkty, średni = łatwe + średnie, trudny = wszystkie.
+const LEVEL_KEY = 'gsb.level';
+const LEVEL_RANK = { 'łatwy': 0, 'średni': 1, 'trudny': 2 };
+
+function loadLevel() {
+  try {
+    const v = localStorage.getItem(LEVEL_KEY);
+    if (v in LEVEL_RANK) return v;
+  } catch {}
+  return 'łatwy';
+}
+
+// Punkt bez poziomu (np. dane z plików JSON) traktujemy jak łatwy.
+const inLevel = (p) => LEVEL_RANK[p.difficulty || 'łatwy'] <= LEVEL_RANK[state.level];
 
 function saveMode(mode) {
   try { localStorage.setItem(MODE_KEY, mode); } catch {}
 }
+
+function loadToken() {
+  try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
+}
+
+function saveToken(token) {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {}
+}
+
+const canEdit = () => state.api && state.user && ['admin', 'editor'].includes(state.user.role);
+const isAdmin = () => state.api && state.user && state.user.role === 'admin';
 
 // --- porównywanie odpowiedzi ---------------------------------------------------
 
@@ -128,8 +170,8 @@ function matches(input, label, threshold = 100) {
 
 // --- dane ------------------------------------------------------------------------
 
-// Dane czytane bezpośrednio z plików JSON w data/ (strona statyczna, np. GitHub Pages):
-// data/trails.json – lista szlaków, data/<szlak>.json – punkty szlaku.
+// Źródło danych: API (szlaki.kj88.pl – baza MySQL, logowanie, edycja, wyniki), a gdy go nie ma
+// (GitHub Pages, wersja Docker) – pliki JSON w data/: trails.json i <szlak>.json.
 const pointsCache = {};
 
 async function fetchJson(path) {
@@ -138,30 +180,61 @@ async function fetchJson(path) {
   return res.json();
 }
 
+async function api(route, { method = 'GET', body, query } = {}) {
+  const qs = query ? `&${new URLSearchParams(query)}` : '';
+  const headers = { 'Content-Type': 'application/json' };
+  if (state.token) headers['X-Auth-Token'] = state.token;
+  const res = await fetch(`api/?r=${route}${qs}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err = new Error((data && data.error) || `Błąd ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
 async function loadTrails() {
-  state.trails = await fetchJson('data/trails.json');
+  try {
+    const trails = await api('trails');
+    if (Array.isArray(trails) && trails.length) {
+      state.trails = trails;
+      state.api = true;
+    }
+  } catch {}
+  if (!state.api) state.trails = await fetchJson('data/trails.json');
   const saved = state.trails.find((t) => t.id === loadTrailId());
   state.trail = saved || state.trails[0];
 }
 
 async function loadPoints(trail = state.trail) {
   if (!pointsCache[trail.id]) {
-    const points = await fetchJson(`data/${trail.file}`);
-    pointsCache[trail.id] = points.sort((a, b) => a.id - b.id);
+    const points = state.api
+      ? await api('points', { query: { trail: trail.id } })
+      : await fetchJson(`data/${trail.file}`);
+    const key = (p) => (p.position !== undefined ? p.position : p.id);
+    pointsCache[trail.id] = points.sort((a, b) => key(a) - key(b));
   }
   return pointsCache[trail.id];
 }
 
-async function getPoints(part) {
-  const all = await loadPoints();
-  return part ? all.filter((p) => p.name_mountain_part === part) : all.slice();
+// Punkty do nauki: z wybranego pasma (albo całego szlaku) i z wybranego poziomu trudności.
+// all = true – wszystkie punkty bez filtra poziomu (lista „Przeglądaj punkty”, edycja).
+async function getPoints(part, { all = false } = {}) {
+  const points = await loadPoints();
+  return points.filter((p) => (!part || p.name_mountain_part === part) && (all || inLevel(p)));
 }
 
-// Pasma w kolejności występowania na szlaku + liczba punktów.
+// Pasma w kolejności występowania na szlaku + liczba punktów na wybranym poziomie.
 // Gdy pasmo pojawia się na szlaku dwa razy, liczymy je razem (pierwsza pozycja wyznacza kolejność).
 async function getParts() {
   const parts = [];
-  for (const p of await loadPoints()) {
+  for (const p of await getPoints(null)) {
     const known = parts.find((x) => x.name === p.name_mountain_part);
     if (known) known.count++;
     else parts.push({ name: p.name_mountain_part, count: 1 });
@@ -229,7 +302,14 @@ async function selectTrail(trail) {
 async function renderParts() {
   const parts = await getParts();
   if (state.reversed) parts.reverse();
+  const total = (await loadPoints()).length;
+  const used = parts.reduce((n, p) => n + p.count, 0);
+  const levelText = { 'łatwy': 'tylko łatwe punkty', 'średni': 'łatwe i średnie punkty', 'trudny': 'wszystkie punkty' };
+  $('level-info').textContent = `${levelText[state.level]} – na tym szlaku ${used} z ${total}`;
   $('parts').innerHTML = '';
+  if (!parts.length) {
+    $('parts').innerHTML = '<li class="muted">Na tym poziomie nie ma jeszcze punktów – wybierz wyższy poziom.</li>';
+  }
   for (const p of parts) {
     const li = document.createElement('li');
     const btn = document.createElement('button');
@@ -259,20 +339,46 @@ $('dir-toggle').addEventListener('click', () => {
   renderParts();
 });
 
-$('start-all').addEventListener('click', () => startQuiz(null));
+$('start-all').addEventListener('click', () => (state.mode === 'between' ? startBetween(null) : startQuiz(null)));
 
-// --- tryb nauki ------------------------------------------------------------------
+// --- tryb nauki i poziom trudności ---------------------------------------------------
 
 function renderMode() {
   const order = state.mode === 'order';
+  const between = state.mode === 'between';
   document.querySelectorAll('.mode').forEach((b) => {
     b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode));
   });
   // Układanie tylko dla pasm: chowamy „Cały szlak” i próg zgodności (nie dotyczy klocków).
   $('start-all').hidden = order;
+  $('start-all').textContent = between ? '🎲 Losuj z całego szlaku' : 'Cały szlak od początku';
   $('threshold-setting').hidden = order;
   $('order-info').hidden = !order;
-  $('parts-heading').textContent = order ? 'Wybierz pasmo do ułożenia' : '…albo wybierz pasmo';
+  $('between-info').hidden = !between;
+  $('parts-heading').textContent = order ? 'Wybierz pasmo do ułożenia'
+    : between ? '…albo losuj z pasma' : '…albo wybierz pasmo';
+}
+
+function renderLevel() {
+  document.querySelectorAll('.level').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.level === state.level));
+  });
+}
+
+document.querySelectorAll('.level').forEach((b) => {
+  b.addEventListener('click', () => {
+    state.level = b.dataset.level;
+    try { localStorage.setItem(LEVEL_KEY, state.level); } catch {}
+    renderLevel();
+    renderParts();
+  });
+});
+
+// Za mało punktów na wybranym poziomie, żeby zacząć naukę.
+function tooFew(points, min) {
+  if (points.length >= min) return false;
+  alert(`Na poziomie „${state.level}” jest tu za mało punktów (${points.length}). Wybierz wyższy poziom trudności.`);
+  return true;
 }
 
 document.querySelectorAll('.mode').forEach((b) => {
@@ -284,16 +390,26 @@ document.querySelectorAll('.mode').forEach((b) => {
 });
 
 function startPart(part) {
-  return state.mode === 'order' ? startOrder(part) : startQuiz(part);
+  if (state.mode === 'order') return startOrder(part);
+  if (state.mode === 'between') return startBetween(part);
+  return startQuiz(part);
 }
 
 // --- lista punktów -------------------------------------------------------------
 
-async function showList() {
-  const points = await getPoints(null);
+async function showList({ keepScroll = false } = {}) {
+  const scrollY = window.scrollY;
+  const points = await getPoints(null, { all: true });
   if (state.reversed) points.reverse();
   const box = $('point-list');
   box.innerHTML = '';
+  box.classList.toggle('editing', state.editing);
+  $('list-edit').hidden = !canEdit();
+  $('list-edit').setAttribute('aria-pressed', String(state.editing));
+  $('list-edit').textContent = state.editing ? '✓ Gotowe' : '✏️ Edytuj';
+  $('list-add-first').hidden = !state.editing;
+  $('drag-hint').hidden = !state.editing;
+  setOrderDirty(false);
 
   // Grupy = kolejne punkty z tego samego regionu (w wybranym kierunku).
   let group = null;
@@ -329,14 +445,37 @@ async function showList() {
     const meta = document.createElement('small');
     meta.textContent = p.height ? `${p.typ_punktu} · ${p.height} m` : p.typ_punktu;
     li.append(nr, ico, label, meta);
+    if (p.difficulty) {
+      const diff = document.createElement('span');
+      diff.className = `diff diff-${normalize(p.difficulty)}`;
+      diff.title = `Trudność: ${p.difficulty}`;
+      diff.setAttribute('aria-label', `trudność ${p.difficulty}`);
+      li.appendChild(diff);
+    }
+    li.dataset.id = p.id;
+    if (state.editing) {
+      li.tabIndex = 0;
+      li.addEventListener('click', () => {
+        if (Date.now() - drag.endedAt < 400) return; // to był koniec przeciągania, nie kliknięcie
+        if (state.orderDirty) {
+          setListMessage('Najpierw zapisz albo anuluj nową kolejność.');
+          return;
+        }
+        openEditor(p);
+      });
+      li.addEventListener('pointerdown', onDragDown);
+    }
     group.list.appendChild(li);
   });
 
-  const ends = [shortLabel(points[0].label), shortLabel(points[points.length - 1].label)];
-  $('list-title').textContent = `${state.trail.short} · ${ends[0]} → ${ends[1]}`;
-  $('list-search').value = '';
+  if (points.length) {
+    const ends = [shortLabel(points[0].label), shortLabel(points[points.length - 1].label)];
+    $('list-title').textContent = `${state.trail.short} · ${ends[0]} → ${ends[1]}`;
+  }
+  if (!keepScroll) $('list-search').value = '';
   filterList();
   show('list');
+  if (keepScroll) window.scrollTo(0, scrollY);
 }
 
 function filterList() {
@@ -356,16 +495,606 @@ function filterList() {
   $('list-count').textContent = q ? `${visible} z ${total} punktów` : `${total} punktów`;
 }
 
-$('browse').addEventListener('click', showList);
+$('browse').addEventListener('click', () => showList());
 $('list-search').addEventListener('input', filterList);
-$('list-back').addEventListener('click', () => show('start'));
+const discardOrder = () => !state.orderDirty || confirm('Porzucić niezapisaną nową kolejność punktów?');
+
+$('list-back').addEventListener('click', () => {
+  if (!discardOrder()) return;
+  setOrderDirty(false);
+  state.editing = false;
+  show('start');
+});
+$('list-edit').addEventListener('click', () => {
+  if (!discardOrder()) return;
+  state.editing = !state.editing;
+  showList({ keepScroll: true });
+});
+
+// --- przeciąganie kafelków w trybie edycji ---------------------------------------------
+// Myszka: wciśnij i przeciągnij. Telefon: przytrzymaj ~0,5 s (kafelek zmienia kolor), potem
+// przesuń palcem. Zmiana kolejności jest tylko na ekranie, dopóki nie klikniesz „Zapisz kolejność”.
+
+const LONG_PRESS_MS = 450;
+const drag = {
+  pending: null, li: null, ph: null, pointerId: null, type: '', timer: 0,
+  startX: 0, startY: 0, lastY: 0, offsetY: 0, active: false, endedAt: 0, raf: 0,
+};
+
+function setOrderDirty(dirty) {
+  state.orderDirty = dirty;
+  $('order-bar').hidden = !dirty;
+}
+
+function onDragDown(e) {
+  if (!state.editing || drag.active || drag.pending) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if ($('list-search').value.trim()) {
+    setListMessage('Przy wyszukiwaniu nie można przenosić punktów – wyczyść pole szukania.');
+    return;
+  }
+  Object.assign(drag, {
+    pending: e.currentTarget, pointerId: e.pointerId, type: e.pointerType,
+    startX: e.clientX, startY: e.clientY, lastY: e.clientY,
+  });
+  if (e.pointerType !== 'mouse') {
+    drag.pending.classList.add('pressing');
+    drag.timer = setTimeout(() => beginDrag(drag.lastY), LONG_PRESS_MS);
+  }
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragEnd);
+  window.addEventListener('pointercancel', onDragEnd);
+}
+
+function onDragMove(e) {
+  if (e.pointerId !== drag.pointerId) return;
+  drag.lastY = e.clientY;
+  if (!drag.active) {
+    const moved = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
+    if (drag.type === 'mouse') {
+      if (moved > 5) beginDrag(e.clientY);
+    } else if (moved > 10) {
+      resetDrag(); // palec ruszył przed czasem – to przewijanie listy, nie przenoszenie
+    }
+    return;
+  }
+  e.preventDefault();
+  placeDragged(e.clientY);
+}
+
+function beginDrag(y) {
+  const li = drag.pending;
+  if (!li) return;
+  const rect = li.getBoundingClientRect();
+  const ph = document.createElement('li');
+  ph.className = 'drop-placeholder';
+  ph.style.height = `${rect.height}px`;
+  drag.fromIndex = tileIndex(li);
+  li.before(ph);
+  li.classList.remove('pressing');
+  li.classList.add('dragging');
+  Object.assign(li.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px` });
+  Object.assign(drag, { li, ph, active: true, offsetY: y - rect.top });
+  document.body.classList.add('drag-active');
+  if (navigator.vibrate) navigator.vibrate(25);
+  autoScroll();
+}
+
+// Kafelek za palcem/kursorem; miejsce docelowe = przed pierwszym kafelkiem, którego środek jest niżej.
+function placeDragged(y) {
+  const { li, ph } = drag;
+  li.style.top = `${y - drag.offsetY}px`;
+  const items = [...$('point-list').querySelectorAll('li:not(.dragging):not(.drop-placeholder)')];
+  const target = items.find((it) => {
+    const r = it.getBoundingClientRect();
+    return y < r.top + r.height / 2;
+  });
+  if (target) {
+    if (target.previousElementSibling !== ph) target.before(ph);
+  } else if (items.length) {
+    const last = items[items.length - 1];
+    if (last.nextElementSibling !== ph) last.after(ph);
+  }
+}
+
+// Przewijanie strony, gdy kafelek jest przy górnej lub dolnej krawędzi ekranu.
+function autoScroll() {
+  if (!drag.active) return;
+  const top = document.querySelector('#screen-list .list-head').getBoundingClientRect().bottom;
+  const y = drag.lastY;
+  let dy = 0;
+  if (y < top + 50) dy = -Math.ceil((top + 50 - y) / 5);
+  else if (y > window.innerHeight - 60) dy = Math.ceil((y - (window.innerHeight - 60)) / 5);
+  if (dy) {
+    window.scrollBy(0, Math.max(-20, Math.min(20, dy)));
+    placeDragged(y);
+  }
+  drag.raf = requestAnimationFrame(autoScroll);
+}
+
+function onDragEnd(e) {
+  if (e.pointerId !== drag.pointerId) return;
+  if (drag.active) {
+    const { li, ph } = drag;
+    ph.replaceWith(li);
+    li.classList.remove('dragging');
+    li.removeAttribute('style');
+    drag.endedAt = Date.now();
+    if (tileIndex(li) !== drag.fromIndex) {
+      renumberList();
+      setOrderDirty(true);
+    }
+  }
+  resetDrag();
+}
+
+function resetDrag() {
+  clearTimeout(drag.timer);
+  cancelAnimationFrame(drag.raf);
+  if (drag.pending) drag.pending.classList.remove('pressing');
+  Object.assign(drag, { pending: null, li: null, ph: null, pointerId: null, active: false });
+  document.body.classList.remove('drag-active');
+  window.removeEventListener('pointermove', onDragMove);
+  window.removeEventListener('pointerup', onDragEnd);
+  window.removeEventListener('pointercancel', onDragEnd);
+}
+
+// Podczas przeciągania palcem blokujemy przewijanie strony.
+document.addEventListener('touchmove', (e) => { if (drag.active) e.preventDefault(); }, { passive: false });
+// Długie przytrzymanie nie otwiera menu kontekstowego na kafelku.
+$('point-list').addEventListener('contextmenu', (e) => { if (state.editing) e.preventDefault(); });
+
+const tileIndex = (li) => [...$('point-list').querySelectorAll('li[data-id]')].indexOf(li);
+
+function renumberList() {
+  $('point-list').querySelectorAll('li:not(.drop-placeholder) .nr').forEach((nr, i) => { nr.textContent = i + 1; });
+}
+
+$('order-cancel').addEventListener('click', () => showList({ keepScroll: true }));
+$('order-save').addEventListener('click', async () => {
+  const btn = $('order-save');
+  btn.disabled = true;
+  try {
+    const ids = [...$('point-list').querySelectorAll('li[data-id]')].map((li) => Number(li.dataset.id));
+    if (state.reversed) ids.reverse(); // w bazie kolejność zawsze od początku szlaku
+    await api('points_reorder', { method: 'POST', body: { trail: state.trail.id, ids } });
+    await afterEdit('✓ Zapisano nową kolejność');
+  } catch (err) {
+    setListMessage(`✗ ${err.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+});
+$('list-add-first').addEventListener('click', () => openEditor(null, { insertAt: 'start' }));
+
+// --- edycja punktów (edytor, administrator) ------------------------------------------
+
+// Punkt „po którym” wstawić nowy, w kolejności z bazy. Przy odwróconym kierunku
+// „dodaj po tym” na ekranie oznacza „przed nim” w bazie.
+function afterIdFor(point) {
+  const all = pointsCache[state.trail.id];
+  const idx = all.findIndex((p) => p.id === point.id);
+  if (!state.reversed) return point.id;
+  return idx > 0 ? all[idx - 1].id : null;
+}
+
+function fillSelect(select, values, current) {
+  select.innerHTML = '';
+  for (const v of values) {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = v;
+    if (v === current) o.selected = true;
+    select.appendChild(o);
+  }
+}
+
+// point = istniejący punkt do edycji albo null (nowy). Dla nowego: afterId albo insertAt 'start'.
+function openEditor(point, { afterId = null, insertAt = null, region = null } = {}) {
+  const all = pointsCache[state.trail.id] || [];
+  const regions = [...new Set(all.map((p) => p.name_mountain_part))];
+  $('edit-regions').replaceChildren(...regions.map((r) => {
+    const o = document.createElement('option');
+    o.value = r;
+    return o;
+  }));
+
+  state.edit = { point, afterId, insertAt };
+  const isNew = !point;
+  $('edit-title').textContent = isNew ? 'Nowy punkt' : 'Edycja punktu';
+  $('edit-sub').textContent = isNew
+    ? (insertAt === 'start' ? 'na początku szlaku' : `po: ${(all.find((p) => p.id === afterId) || {}).label || '—'}`)
+    : `${state.trail.short} · ${point.name_mountain_part}`;
+  $('edit-label').value = isNew ? '' : point.label;
+  $('edit-region').value = isNew ? (region || (all.find((p) => p.id === afterId) || all[0] || {}).name_mountain_part || '') : point.name_mountain_part;
+  fillSelect($('edit-type'), TYPES, isNew ? 'góra' : point.typ_punktu);
+  $('edit-height').value = isNew || point.height == null ? '' : point.height;
+  fillSelect($('edit-difficulty'), DIFFICULTIES, isNew ? 'łatwy' : (point.difficulty || 'łatwy'));
+  document.querySelectorAll('.edit-existing').forEach((el) => { el.hidden = isNew; });
+  setEditMessage('', '');
+  show('edit');
+  $('edit-label').focus({ preventScroll: true });
+}
+
+function setEditMessage(text, kind) {
+  const el = $('edit-message');
+  el.textContent = text;
+  el.className = `feedback ${kind}`;
+}
+
+function editFormData() {
+  return {
+    label: $('edit-label').value,
+    region: $('edit-region').value,
+    type: $('edit-type').value,
+    height: $('edit-height').value,
+    difficulty: $('edit-difficulty').value,
+  };
+}
+
+// Po zmianie: odśwież dane szlaku i wróć do listy (dalej w trybie edycji).
+async function afterEdit(message) {
+  delete pointsCache[state.trail.id];
+  await showList({ keepScroll: true });
+  renderParts();
+  renderDirection();
+  if (message) setListMessage(message);
+}
+
+function setListMessage(text) {
+  const el = $('list-message');
+  el.textContent = text;
+  el.hidden = !text;
+  clearTimeout(setListMessage.timer);
+  setListMessage.timer = setTimeout(() => { el.hidden = true; }, 3000);
+}
+
+async function runEdit(action) {
+  const buttons = document.querySelectorAll('#screen-edit button');
+  buttons.forEach((b) => { b.disabled = true; });
+  try {
+    await action();
+  } catch (err) {
+    setEditMessage(`✗ ${err.message}`, 'bad');
+  } finally {
+    buttons.forEach((b) => { b.disabled = false; });
+  }
+}
+
+$('edit-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  runEdit(async () => {
+    const { point, afterId } = state.edit;
+    if (point) {
+      await api('points', { method: 'PUT', body: { id: point.id, ...editFormData() } });
+      await afterEdit(`✓ Zapisano: ${$('edit-label').value.trim()}`);
+    } else {
+      await api('points', {
+        method: 'POST',
+        body: { trail: state.trail.id, after_id: afterId, ...editFormData() },
+      });
+      await afterEdit(`✓ Dodano: ${$('edit-label').value.trim()}`);
+    }
+  });
+});
+
+function movePoint(visualDir) {
+  // Na ekranie „w górę” = wcześniej w wyświetlanej kolejności; przy odwróconym kierunku to dalej w bazie.
+  const dir = state.reversed ? -visualDir : visualDir;
+  runEdit(async () => {
+    await api('points_move', { method: 'POST', body: { id: state.edit.point.id, dir } });
+    await afterEdit(`✓ Przesunięto: ${state.edit.point.label}`);
+  });
+}
+
+$('edit-up').addEventListener('click', () => movePoint(-1));
+$('edit-down').addEventListener('click', () => movePoint(1));
+$('edit-add-after').addEventListener('click', () => {
+  const p = state.edit.point;
+  const afterId = afterIdFor(p);
+  openEditor(null, { afterId, insertAt: afterId ? null : 'start', region: p.name_mountain_part });
+});
+$('edit-delete').addEventListener('click', () => {
+  const p = state.edit.point;
+  if (!confirm(`Usunąć punkt „${p.label}”? Tego nie da się cofnąć.`)) return;
+  runEdit(async () => {
+    await api('points', { method: 'DELETE', body: { id: p.id } });
+    await afterEdit(`✓ Usunięto: ${p.label}`);
+  });
+});
+$('edit-back').addEventListener('click', () => showList({ keepScroll: true }));
+$('edit-cancel').addEventListener('click', () => showList({ keepScroll: true }));
+
+// --- konto: logowanie, wyniki, zmiana hasła ---------------------------------------------
+
+function renderAccount() {
+  $('account-bar').hidden = !state.api;
+  $('account-btn').textContent = state.user ? `👤 ${state.user.login}` : '👤 Zaloguj się';
+}
+
+async function restoreSession() {
+  if (!state.api || !state.token) return;
+  try {
+    state.user = await api('me');
+  } catch {
+    state.user = null;
+  }
+  if (!state.user) {
+    state.token = null;
+    saveToken(null);
+  }
+}
+
+$('account-btn').addEventListener('click', () => (state.user ? showAccount() : showLogin()));
+
+function showLogin() {
+  $('login-error').textContent = '';
+  $('login-password').value = '';
+  $('login-https').hidden = location.protocol === 'https:';
+  show('login');
+  $('login-login').focus({ preventScroll: true });
+}
+
+$('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = $('login-submit');
+  btn.disabled = true;
+  $('login-error').textContent = '';
+  try {
+    const res = await api('login', {
+      method: 'POST',
+      body: { login: $('login-login').value.trim(), password: $('login-password').value },
+    });
+    state.token = res.token;
+    state.user = res.user;
+    saveToken(res.token);
+    $('login-password').value = '';
+    renderAccount();
+    show('start');
+  } catch (err) {
+    $('login-error').textContent = `✗ ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+$('login-back').addEventListener('click', () => show('start'));
+
+async function showAccount() {
+  $('account-login').textContent = state.user.login;
+  $('account-role').textContent = ROLE_LABEL[state.user.role] || state.user.role;
+  $('account-users').hidden = !isAdmin();
+  $('pw-message').textContent = '';
+  show('account');
+  await renderHistory();
+}
+
+const MODE_LABEL = { type: '✍️ wpisywanie', order: '🧩 układanie', between: '↕️ pomiędzy' };
+
+function formatDate(s) {
+  const d = new Date(s.replace(' ', 'T'));
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDuration(sec) {
+  if (sec == null) return '';
+  const m = Math.floor(sec / 60);
+  return m ? `${m} min ${sec % 60} s` : `${sec} s`;
+}
+
+async function renderHistory() {
+  const box = $('history');
+  box.innerHTML = '<li class="muted">Wczytywanie…</li>';
+  try {
+    const rows = await api('results');
+    box.innerHTML = '';
+    if (!rows.length) {
+      box.innerHTML = '<li class="muted">Brak wyników – ukończ naukę pasma albo szlaku, a pojawi się tutaj.</li>';
+      return;
+    }
+    for (const r of rows) {
+      const li = document.createElement('li');
+      const head = document.createElement('div');
+      head.className = 'h-head';
+      const what = document.createElement('strong');
+      what.textContent = `${r.short} · ${r.region || 'cały szlak'}`;
+      const when = document.createElement('small');
+      when.textContent = formatDate(r.created_at);
+      head.append(what, when);
+      const body = document.createElement('div');
+      body.className = 'h-body';
+      const pct = r.total ? Math.round((r.correct / r.total) * 100) : 0;
+      const details = r.mode === 'order'
+        ? `pomyłki: ${r.mistakes}`
+        : `${r.correct}/${r.total} trafione (${pct}%) · pokazane: ${r.revealed} · błędy: ${r.mistakes}`;
+      body.textContent = [MODE_LABEL[r.mode], r.level ? `poziom: ${r.level}` : null,
+        r.reversed ? '↩︎ odwrotnie' : null, details, formatDuration(r.duration_s)]
+        .filter(Boolean).join(' · ');
+      li.append(head, body);
+      box.appendChild(li);
+    }
+  } catch (err) {
+    box.innerHTML = '';
+    const li = document.createElement('li');
+    li.className = 'error';
+    li.textContent = `Nie udało się wczytać wyników: ${err.message}`;
+    box.appendChild(li);
+  }
+}
+
+$('account-back').addEventListener('click', () => show('start'));
+$('account-logout').addEventListener('click', async () => {
+  try { await api('logout', { method: 'POST' }); } catch {}
+  state.user = null;
+  state.token = null;
+  saveToken(null);
+  state.editing = false;
+  renderAccount();
+  show('start');
+});
+
+$('pw-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = $('pw-message');
+  if ($('pw-new').value !== $('pw-new2').value) {
+    msg.textContent = '✗ Nowe hasła się różnią.';
+    msg.className = 'feedback bad';
+    return;
+  }
+  try {
+    await api('password', { method: 'POST', body: { current: $('pw-current').value, password: $('pw-new').value } });
+    msg.textContent = '✓ Hasło zmienione.';
+    msg.className = 'feedback ok';
+    e.target.reset();
+  } catch (err) {
+    msg.textContent = `✗ ${err.message}`;
+    msg.className = 'feedback bad';
+  }
+});
+
+// Zapis wyniku po ukończeniu nauki (tylko zalogowani, tylko z API).
+async function saveResult(result) {
+  const note = $('summary-note');
+  if (!state.api) { note.textContent = ''; return; }
+  if (!state.user) { note.textContent = 'Zaloguj się, aby zapisywać wyniki w historii.'; return; }
+  note.textContent = 'Zapisywanie wyniku…';
+  try {
+    await api('results', {
+      method: 'POST',
+      body: {
+        trail: state.trail.id,
+        region: state.part,
+        level: state.level,
+        reversed: state.reversed,
+        duration_s: Math.round((Date.now() - state.startedAt) / 1000),
+        ...result,
+      },
+    });
+    note.textContent = '✓ Wynik zapisany w historii.';
+  } catch (err) {
+    note.textContent = `✗ Nie zapisano wyniku: ${err.message}`;
+  }
+}
+
+// --- konta użytkowników (administrator) --------------------------------------------------
+
+$('account-users').addEventListener('click', showUsers);
+$('users-back').addEventListener('click', () => showAccount());
+
+async function showUsers() {
+  fillSelect($('new-role'), Object.keys(ROLE_LABEL), 'user');
+  [...$('new-role').options].forEach((o) => { o.textContent = ROLE_LABEL[o.value]; });
+  $('users-message').textContent = '';
+  show('users');
+  await renderUsers();
+}
+
+function setUsersMessage(text, kind) {
+  const el = $('users-message');
+  el.textContent = text;
+  el.className = `feedback ${kind}`;
+}
+
+async function renderUsers() {
+  const box = $('users-list');
+  box.innerHTML = '<li class="muted">Wczytywanie…</li>';
+  let users;
+  try {
+    users = await api('users');
+  } catch (err) {
+    box.innerHTML = '';
+    setUsersMessage(`✗ ${err.message}`, 'bad');
+    return;
+  }
+  box.innerHTML = '';
+  for (const u of users) {
+    const li = document.createElement('li');
+    const name = document.createElement('div');
+    name.className = 'u-name';
+    const strong = document.createElement('strong');
+    strong.textContent = u.login;
+    const small = document.createElement('small');
+    small.textContent = u.last_login ? `ostatnio: ${formatDate(u.last_login)}` : 'jeszcze się nie logował(a)';
+    name.append(strong, small);
+
+    const role = document.createElement('select');
+    role.setAttribute('aria-label', `Rola: ${u.login}`);
+    fillSelect(role, Object.keys(ROLE_LABEL), u.role);
+    [...role.options].forEach((o) => { o.textContent = ROLE_LABEL[o.value]; });
+    role.addEventListener('change', async () => {
+      try {
+        await api('users', { method: 'PUT', body: { id: u.id, role: role.value } });
+        setUsersMessage(`✓ ${u.login}: ${ROLE_LABEL[role.value]}`, 'ok');
+      } catch (err) {
+        setUsersMessage(`✗ ${err.message}`, 'bad');
+        role.value = u.role;
+      }
+    });
+
+    const pw = document.createElement('button');
+    pw.type = 'button';
+    pw.className = 'pill small';
+    pw.textContent = '🔑 Hasło';
+    pw.addEventListener('click', async () => {
+      const p = prompt(`Nowe hasło dla „${u.login}” (min. 8 znaków):`);
+      if (!p) return;
+      try {
+        await api('users', { method: 'PUT', body: { id: u.id, password: p } });
+        setUsersMessage(`✓ Zmieniono hasło: ${u.login}`, 'ok');
+      } catch (err) {
+        setUsersMessage(`✗ ${err.message}`, 'bad');
+      }
+    });
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'pill small danger';
+    del.textContent = '🗑';
+    del.setAttribute('aria-label', `Usuń konto ${u.login}`);
+    del.hidden = state.user && u.id === state.user.id;
+    del.addEventListener('click', async () => {
+      if (!confirm(`Usunąć konto „${u.login}” razem z historią wyników? Tego nie da się cofnąć.`)) return;
+      try {
+        await api('users', { method: 'DELETE', body: { id: u.id } });
+        setUsersMessage(`✓ Usunięto konto: ${u.login}`, 'ok');
+        renderUsers();
+      } catch (err) {
+        setUsersMessage(`✗ ${err.message}`, 'bad');
+      }
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'u-actions';
+    actions.append(role, pw, del);
+    li.append(name, actions);
+    box.appendChild(li);
+  }
+}
+
+$('new-user-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const u = await api('users', {
+      method: 'POST',
+      body: { login: $('new-login').value.trim(), password: $('new-password').value, role: $('new-role').value },
+    });
+    setUsersMessage(`✓ Założono konto: ${u.login} (${ROLE_LABEL[u.role]})`, 'ok');
+    e.target.reset();
+    $('new-role').value = 'user';
+    renderUsers();
+  } catch (err) {
+    setUsersMessage(`✗ ${err.message}`, 'bad');
+  }
+});
 
 // --- nauka -------------------------------------------------------------------
 
 async function startQuiz(part) {
   const points = await getPoints(part);
+  if (tooFew(points, 2)) return;
   if (state.reversed) points.reverse();
   state.lastMode = 'type';
+  state.startedAt = Date.now();
   Object.assign(state, {
     part, points, index: 0, hintLevel: 0, mistakes: 0, revealed: 0, close: 0,
   });
@@ -483,6 +1212,9 @@ function finish() {
     `Trafione: ${ok} / ${asked} (w tym z literówką: ${state.close}) · ` +
     `pokazane: ${state.revealed} · błędne próby: ${state.mistakes}`;
   show('end');
+  saveResult({
+    mode: 'type', total: asked, correct: ok, close: state.close, revealed: state.revealed, mistakes: state.mistakes,
+  });
 }
 
 // --- układanie klocków --------------------------------------------------------------
@@ -553,9 +1285,11 @@ function startBatch() {
 
 async function startOrder(part) {
   const points = await getPoints(part);
+  if (tooFew(points, 2)) return;
   if (state.reversed) points.reverse();
   state.part = part;
   state.lastMode = 'order';
+  state.startedAt = Date.now();
   state.order = {
     expected: points,
     next: 0,          // indeks następnego punktu do ułożenia (w całym paśmie)
@@ -670,16 +1404,290 @@ function finishOrder() {
   $('summary').textContent =
     `Ułożone punkty: ${o.expected.length} · pomyłki: ${o.mistakes}`;
   show('end');
+  saveResult({ mode: 'order', total: o.expected.length, correct: o.expected.length, mistakes: o.mistakes });
 }
 
-$('again').addEventListener('click', () =>
-  (state.lastMode === 'order' ? startOrder(state.part) : startQuiz(state.part)));
+// --- pomiędzy: losowe miejsce na szlaku, wpisz punkt między dwoma sąsiadami ------------------
+
+const BETWEEN_ROUNDS = 10;
+
+async function startBetween(part) {
+  const points = await getPoints(part);
+  if (tooFew(points, 3)) return;
+  if (state.reversed) points.reverse();
+  // Losowe, niepowtarzające się „środki” (bez pierwszego i ostatniego punktu).
+  const middles = shuffle(points.slice(1, -1).map((_, i) => i + 1)).slice(0, BETWEEN_ROUNDS);
+  state.part = part;
+  state.lastMode = 'between';
+  state.startedAt = Date.now();
+  state.between = {
+    points, queue: middles, i: 0, correct: 0, close: 0, revealed: 0, mistakes: 0, hintLevel: 0, busy: false,
+  };
+  $('between-title').textContent = `${state.trail.short} · ${part || 'cały szlak'} · pomiędzy`;
+  show('between');
+  nextBetween();
+}
+
+function pointBox(el, p) {
+  el.replaceChildren();
+  const ico = document.createElement('span');
+  ico.className = 'ico';
+  ico.textContent = TYPE_ICON[p.typ_punktu] || '•';
+  const label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = p.label;
+  const meta = document.createElement('small');
+  meta.textContent = p.height ? `${p.typ_punktu} · ${p.height} m` : p.typ_punktu;
+  el.append(ico, label, meta);
+}
+
+function setBetweenFeedback(text, kind) {
+  const el = $('b-feedback');
+  el.textContent = text;
+  el.className = `feedback ${kind}`;
+}
+
+function renderBetweenProgress() {
+  const b = state.between;
+  $('between-progress').textContent = `Pytanie ${Math.min(b.i + 1, b.queue.length)} / ${b.queue.length} · trafione: ${b.correct}`;
+  $('between-fill').style.width = `${(b.i / b.queue.length) * 100}%`;
+}
+
+function nextBetween() {
+  const b = state.between;
+  if (b.i >= b.queue.length) return finishBetween();
+  const k = b.queue[b.i];
+  b.cur = { prev: b.points[k - 1], mid: b.points[k], next: b.points[k + 1] };
+  b.hintLevel = 0;
+  b.busy = false;
+  pointBox($('b-prev'), b.cur.prev);
+  pointBox($('b-next'), b.cur.next);
+  const mid = $('b-mid');
+  mid.className = 'b-point b-mid';
+  mid.textContent = '?';
+  $('b-hint').textContent = '';
+  setBetweenFeedback('', '');
+  $('b-answer').value = '';
+  $('b-answer').focus({ preventScroll: true });
+  renderBetweenProgress();
+}
+
+// Pokaż odpowiedź w środku karty i po chwili przejdź do następnego pytania.
+function resolveBetween(kind, delay) {
+  const b = state.between;
+  b.busy = true;
+  const mid = $('b-mid');
+  pointBox(mid, b.cur.mid);
+  mid.className = `b-point b-mid ${kind}`;
+  b.i++;
+  renderBetweenProgress();
+  setTimeout(() => { if (state.between === b) nextBetween(); }, delay);
+}
+
+$('between-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const b = state.between;
+  const input = $('b-answer').value;
+  if (b.busy || !input.trim()) return;
+  const score = similarity(input, b.cur.mid.label);
+  if (score >= state.threshold) {
+    b.correct++;
+    if (score < 100) b.close++;
+    setBetweenFeedback(score === 100 ? '✓ 100% – dokładnie tak' : `✓ ${score}% – zaliczone, poprawnie: ${b.cur.mid.label}`,
+      score === 100 ? 'ok' : 'close');
+    resolveBetween(score === 100 ? 'ok' : 'close', 1200);
+  } else {
+    b.mistakes++;
+    setBetweenFeedback(`✗ ${score}% zgodności – potrzeba ${state.threshold}%`, 'bad');
+    const field = $('b-answer');
+    field.classList.remove('wrong');
+    void field.offsetWidth; // restart animacji
+    field.classList.add('wrong');
+    field.select();
+  }
+});
+
+$('b-btn-hint').addEventListener('click', () => {
+  const b = state.between;
+  if (b.busy) return;
+  const p = b.cur.mid;
+  b.hintLevel++;
+  const type = `${p.typ_punktu}${p.height ? ` ${p.height} m` : ''}`;
+  const hints = [
+    `Typ: ${TYPE_ICON[p.typ_punktu] || ''} ${type}`,
+    `Typ: ${type} · zaczyna się na „${p.label[0]}”`,
+    `Typ: ${type} · „${p.label.slice(0, Math.ceil(p.label.length / 2))}…”`,
+  ];
+  $('b-hint').textContent = hints[Math.min(b.hintLevel, hints.length) - 1];
+  $('b-answer').focus({ preventScroll: true });
+});
+
+$('b-btn-reveal').addEventListener('click', () => {
+  const b = state.between;
+  if (b.busy) return;
+  b.revealed++;
+  setBetweenFeedback(`Pomiędzy jest: ${b.cur.mid.label}`, 'revealed');
+  resolveBetween('revealed', 2200);
+});
+
+$('between-back').addEventListener('click', () => {
+  state.between = null;
+  show('start');
+});
+
+function finishBetween() {
+  const b = state.between;
+  const n = b.queue.length;
+  $('summary').textContent =
+    `Trafione: ${b.correct} / ${n} (w tym z literówką: ${b.close}) · ` +
+    `pokazane: ${b.revealed} · błędne próby: ${b.mistakes}`;
+  show('end');
+  saveResult({ mode: 'between', total: n, correct: b.correct, close: b.close, revealed: b.revealed, mistakes: b.mistakes });
+}
+
+$('again').addEventListener('click', () => {
+  if (state.lastMode === 'order') return startOrder(state.part);
+  if (state.lastMode === 'between') return startBetween(state.part);
+  return startQuiz(state.part);
+});
 $('home').addEventListener('click', () => show('start'));
 
+// --- oczko przy haśle: pokaż / ukryj wpisywane hasło ------------------------------------
+
+document.querySelectorAll('input[type="password"]').forEach((input) => {
+  const wrap = document.createElement('span');
+  wrap.className = 'pw-wrap';
+  input.replaceWith(wrap);
+  const eye = document.createElement('button');
+  eye.type = 'button';
+  eye.className = 'pw-eye';
+  eye.textContent = '👁';
+  eye.setAttribute('aria-label', 'Pokaż hasło');
+  eye.setAttribute('aria-pressed', 'false');
+  eye.addEventListener('click', () => {
+    const visible = input.type === 'password';
+    input.type = visible ? 'text' : 'password';
+    eye.textContent = visible ? '🙈' : '👁';
+    eye.setAttribute('aria-label', visible ? 'Ukryj hasło' : 'Pokaż hasło');
+    eye.setAttribute('aria-pressed', String(visible));
+    input.focus({ preventScroll: true });
+  });
+  // Po wysłaniu formularza hasło znów jest ukryte.
+  if (input.form) {
+    input.form.addEventListener('submit', () => {
+      input.type = 'password';
+      eye.textContent = '👁';
+      eye.setAttribute('aria-label', 'Pokaż hasło');
+      eye.setAttribute('aria-pressed', 'false');
+    });
+  }
+  wrap.append(input, eye);
+});
+
+// --- odpowiedź głosem (Web Speech API) ---------------------------------------------------
+// Przycisk 🎤 pojawia się tylko, gdy przeglądarka rozpoznaje mowę i wykryto mikrofon.
+// Przeglądarki udostępniają mikrofon tylko na HTTPS (albo localhost).
+
+const VOICE = {
+  answer: {
+    expected: () => (state.points[state.index] || {}).label,
+    form: 'answer-form',
+    feedback: (t, k) => setFeedback(t, k),
+  },
+  'b-answer': {
+    expected: () => (state.between && !state.between.busy && state.between.cur ? state.between.cur.mid.label : null),
+    form: 'between-form',
+    feedback: (t, k) => setBetweenFeedback(t, k),
+  },
+};
+let recognition = null;
+
+const speechCtor = () => window.SpeechRecognition || window.webkitSpeechRecognition;
+
+async function detectMicrophone() {
+  if (!speechCtor() || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return false;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.some((d) => d.kind === 'audioinput');
+  } catch {
+    return false;
+  }
+}
+
+async function initVoice() {
+  const ok = await detectMicrophone();
+  document.querySelectorAll('.mic').forEach((b) => { b.hidden = !ok; });
+  return ok;
+}
+
+function stopListening() {
+  if (recognition) {
+    try { recognition.abort(); } catch {}
+    recognition = null;
+  }
+  document.querySelectorAll('.mic.listening').forEach((b) => b.classList.remove('listening'));
+}
+
+document.querySelectorAll('.mic').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    if (recognition) return stopListening(); // drugie dotknięcie = przerwij słuchanie
+    const cfg = VOICE[btn.dataset.for];
+    const expected = cfg.expected();
+    if (!expected) return;
+    const Ctor = speechCtor();
+    const rec = new Ctor();
+    rec.lang = 'pl-PL';
+    rec.interimResults = false;
+    rec.maxAlternatives = 5;
+    recognition = rec;
+    btn.classList.add('listening');
+    cfg.feedback('🎤 Słucham… powiedz nazwę punktu', '');
+
+    rec.onresult = (e) => {
+      // Rozpoznawanie nazw własnych bywa niepewne – z kilku propozycji bierzemy najbliższą nazwie punktu.
+      const alts = [...e.results[0]].map((a) => a.transcript.trim()).filter(Boolean);
+      if (!alts.length) return;
+      const best = alts.reduce((a, b) => (similarity(b, expected) > similarity(a, expected) ? b : a));
+      $(btn.dataset.for).value = best;
+      stopListening();
+      $(cfg.form).requestSubmit();
+    };
+    rec.onerror = (e) => {
+      const msg = {
+        'not-allowed': 'Brak zgody na mikrofon – zezwól w ustawieniach przeglądarki.',
+        'service-not-allowed': 'Rozpoznawanie mowy jest wyłączone w tej przeglądarce.',
+        'no-speech': 'Nic nie usłyszałem – spróbuj jeszcze raz.',
+        'audio-capture': 'Nie znaleziono mikrofonu.',
+        network: 'Rozpoznawanie mowy potrzebuje internetu.',
+      }[e.error];
+      if (e.error !== 'aborted') cfg.feedback(`🎤 ${msg || `Błąd rozpoznawania mowy (${e.error}).`}`, 'bad');
+      stopListening();
+    };
+    rec.onend = () => {
+      if (recognition === rec) stopListening();
+    };
+    try {
+      rec.start();
+    } catch {
+      stopListening();
+    }
+  });
+});
+
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+  navigator.mediaDevices.addEventListener('devicechange', initVoice);
+}
+initVoice();
+
 renderMode();
+renderLevel();
 renderThreshold();
 loadTrails()
-  .then(() => selectTrail(state.trail))
+  .then(restoreSession)
+  .then(() => {
+    renderAccount();
+    return selectTrail(state.trail);
+  })
   .catch((err) => {
     $('parts').innerHTML = `<li class="error">Nie udało się wczytać danych: ${err.message}</li>`;
   });

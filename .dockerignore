@@ -2,3 +2,4 @@
 node_modules
 *.md
 docker-compose.yml
+public/private/config.php
