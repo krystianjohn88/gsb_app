@@ -625,9 +625,18 @@ async function showList({ keepScroll = false } = {}) {
     const label = document.createElement('span');
     label.className = 'label';
     labelWithMap(label, p);
+    // Punkt obok szlaku (nie na samej trasie) – widoczny znacznik przy nazwie.
+    if (p.on_trail === false) {
+      const off = document.createElement('span');
+      off.className = 'off-trail';
+      off.textContent = '↗ obok szlaku';
+      label.append(' ', off);
+      li.classList.add('is-off-trail');
+    }
     const meta = document.createElement('small');
     meta.textContent = p.height ? `${p.typ_punktu} · ${p.height} m` : p.typ_punktu;
     li.append(nr, ico, label, meta);
+    li.dataset.difficulty = p.difficulty || 'łatwy';
     if (p.difficulty) {
       const diff = document.createElement('span');
       diff.className = `diff diff-${normalize(p.difficulty)}`;
@@ -636,6 +645,13 @@ async function showList({ keepScroll = false } = {}) {
       li.appendChild(diff);
     }
     li.dataset.id = p.id;
+    if (!state.editing) {
+      // Poza edycją dotknięcie punktu pokazuje szczegóły (szlaki, ciekawostki, mapa).
+      li.tabIndex = 0;
+      li.classList.add('has-info');
+      li.addEventListener('click', () => openInfo(p));
+      li.addEventListener('keydown', (e) => { if (e.key === 'Enter') openInfo(p); });
+    }
     if (state.editing) {
       li.tabIndex = 0;
       li.addEventListener('click', () => {
@@ -678,22 +694,64 @@ async function showList({ keepScroll = false } = {}) {
   if (keepScroll) window.scrollTo(0, scrollY);
 }
 
+// Poziomy trudności zaznaczone w filtrze listy (checkboxy „Pokaż: łatwe / średnie / trudne”).
+const listLevels = () => new Set([...document.querySelectorAll('.diff-filter input:checked')].map((c) => c.dataset.level));
+const listFiltered = () => Boolean($('list-search').value.trim()) || listLevels().size < DIFFICULTIES.length;
+
 function filterList() {
   const q = normalize($('list-search').value);
+  const levels = listLevels();
   let visible = 0;
   for (const g of $('point-list').querySelectorAll('.group')) {
     let inGroup = 0;
-    for (const li of g.querySelectorAll('li')) {
-      const hit = !q || li.dataset.search.includes(q);
+    for (const li of g.querySelectorAll('li[data-id]')) {
+      const hit = (!q || li.dataset.search.includes(q)) && levels.has(li.dataset.difficulty);
       li.hidden = !hit;
       if (hit) inGroup++;
     }
     g.hidden = inGroup === 0;
     visible += inGroup;
   }
-  const total = $('point-list').querySelectorAll('li').length;
-  $('list-count').textContent = q ? `${visible} z ${total} punktów` : `${total} punktów`;
+  const total = $('point-list').querySelectorAll('li[data-id]').length;
+  $('list-count').textContent = listFiltered() ? `${visible} z ${total} punktów` : `${total} punktów`;
 }
+
+document.querySelectorAll('.diff-filter input').forEach((c) => c.addEventListener('change', filterList));
+
+// --- szczegóły punktu (okienko z listy) ---------------------------------------------------
+
+function openInfo(p) {
+  $('info-title').textContent = p.label;
+  $('info-sub').textContent = [p.typ_punktu, p.height ? `${p.height} m` : null, p.name_mountain_part]
+    .filter(Boolean).join(' · ');
+  const badges = $('info-badges');
+  badges.replaceChildren();
+  const badge = (text, cls) => {
+    const b = document.createElement('span');
+    b.className = `info-badge ${cls || ''}`;
+    b.textContent = text;
+    badges.appendChild(b);
+  };
+  badge(p.on_trail === false ? '↗ obok szlaku' : '✓ na szlaku', p.on_trail === false ? 'off' : 'on');
+  if (p.difficulty) badge(`trudność: ${p.difficulty}`, `lvl-${normalize(p.difficulty)}`);
+  $('info-trails').textContent = p.trails_info || '';
+  $('info-trails-box').hidden = !p.trails_info;
+  $('info-notes').textContent = p.notes || '';
+  $('info-notes-box').hidden = !p.notes;
+  $('info-empty').hidden = Boolean(p.trails_info || p.notes);
+  const hasMap = Boolean(safeMapUrl(p.map_url));
+  $('info-map').hidden = !hasMap;
+  $('info-map').onclick = () => { $('info-dialog').close(); openMapDialog(p); };
+  if (!$('info-dialog').open) $('info-dialog').showModal();
+}
+
+$('info-close').addEventListener('click', () => $('info-dialog').close());
+$('info-dialog').addEventListener('click', (e) => {
+  const dlg = $('info-dialog');
+  if (e.target !== dlg) return;
+  const r = dlg.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dlg.close();
+});
 
 $('browse').addEventListener('click', () => showList());
 $('list-search').addEventListener('input', filterList);
@@ -729,8 +787,8 @@ function setOrderDirty(dirty) {
 function onDragDown(e) {
   if (!state.editing || drag.active || drag.pending) return;
   if (e.pointerType === 'mouse' && e.button !== 0) return;
-  if ($('list-search').value.trim()) {
-    setListMessage('Przy wyszukiwaniu nie można przenosić punktów – wyczyść pole szukania.');
+  if (listFiltered()) {
+    setListMessage('Przy wyszukiwaniu albo filtrze trudności nie można przenosić punktów – pokaż wszystkie punkty.');
     return;
   }
   Object.assign(drag, {
@@ -910,6 +968,9 @@ function openEditor(point, { afterId = null, insertAt = null, region = null } = 
   fillSelect($('edit-type'), TYPES, isNew ? 'góra' : point.typ_punktu);
   $('edit-height').value = isNew || point.height == null ? '' : point.height;
   fillSelect($('edit-difficulty'), DIFFICULTIES, isNew ? 'łatwy' : (point.difficulty || 'łatwy'));
+  $('edit-on-trail').checked = isNew || point.on_trail !== false;
+  $('edit-trails').value = isNew ? '' : (point.trails_info || '');
+  $('edit-notes').value = isNew ? '' : (point.notes || '');
   $('edit-map').value = isNew ? '' : (point.map_url || '');
   $('edit-coords').value = !isNew && Number.isFinite(point.lat) && Number.isFinite(point.lon)
     ? `${point.lat}, ${point.lon}` : '';
@@ -933,6 +994,9 @@ function editFormData() {
     type: $('edit-type').value,
     height: $('edit-height').value,
     difficulty: $('edit-difficulty').value,
+    on_trail: $('edit-on-trail').checked,
+    trails_info: $('edit-trails').value.trim(),
+    notes: $('edit-notes').value.trim(),
     map_url: extractMapUrl($('edit-map').value),
     coords: $('edit-coords').value.trim(),
   };
@@ -1011,13 +1075,16 @@ const ACTION_LABEL = {
 const FIELD_LABEL = {
   label: 'nazwa', region: 'pasmo', type: 'typ', height: 'wysokość', difficulty: 'trudność',
   map_url: 'mapa', lat: 'szer.', lon: 'dł.', position: 'pozycja',
+  on_trail: 'położenie', trails_info: 'szlaki', notes: 'ciekawostki',
 };
 
 function fmtValue(key, v) {
+  if (key === 'on_trail') return v === false ? 'obok szlaku' : 'na szlaku';
   if (v === null || v === undefined || v === '') return '—';
   if (key === 'map_url') return '🗺️ link';
   if (key === 'height') return `${v} m`;
-  return String(v);
+  const s = String(v);
+  return s.length > 60 ? `„${s.slice(0, 57)}…”` : (key === 'notes' || key === 'trails_info' ? `„${s}”` : s);
 }
 
 function changeLines(h) {

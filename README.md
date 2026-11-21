@@ -52,6 +52,9 @@ Aplikacja liczy zgodność w procentach (odległość Levenshteina) i zalicza od
   (także przeciąganiem – jeden wpis na przeniesiony punkt) albo usunął punkt. W edytorze punktu „🕘 Historia zmian”
   i autor punktu, na liście w trybie edycji „🕘 Ostatnie zmiany” szlaku (także usunięte punkty). Edytor i administrator.
 - **＋ między kafelkami** w trybie edycji dodaje nowy punkt dokładnie w tym miejscu.
+- **Szczegóły punktu:** `on_trail` (na samym szlaku / obok – na liście znacznik „↗ obok szlaku”), `trails_info` (szlaki
+  przez punkt), `notes` (ciekawostki). Dotknięcie punktu na liście (poza edycją) otwiera okienko ze szczegółami.
+- **Filtr listy:** checkboxy „Pokaż: łatwe / średnie / trudne”.
 - **Logowanie:** token w nagłówku `X-Auth-Token`, ważny 30 dni; po 5 złych hasłach konto blokuje się na 15 minut.
 - Bez API (np. lokalnie w Dockerze) aplikacja sama czyta `data/*.json` – tylko nauka, bez kont.
 

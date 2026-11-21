@@ -633,3 +633,46 @@ details.setting[open] summary { margin-bottom: 8px; }
 /* Historia zmian punktu */
 .point-history { display: grid; gap: 6px; margin-top: 8px; }
 .point-history h2 { margin: 8px 0 0; }
+
+/* Edytor: checkbox „na szlaku” i pole wielowierszowe */
+.form .check-row { display: flex; align-items: flex-start; gap: 10px; color: var(--text); font-size: .95rem; cursor: pointer; }
+.form .check-row input { width: 22px; height: 22px; min-height: 0; padding: 0; margin: 1px 0 0; flex: 0 0 auto; accent-color: var(--accent); }
+.form .check-row small { display: block; }
+.form textarea {
+  font: inherit; font-size: 1rem; color: var(--text); background: var(--card);
+  border: 2px solid var(--border); border-radius: 10px; padding: 10px 12px; width: 100%; resize: vertical;
+}
+.form textarea:focus { outline: none; border-color: var(--accent); }
+
+/* Lista: filtr poziomów trudności */
+.diff-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: .88rem; color: var(--muted); }
+.diff-filter label { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; color: var(--text); cursor: pointer; }
+.diff-filter input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+
+/* Lista: punkt obok szlaku */
+.off-trail {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: middle;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+.group li.is-off-trail { background: color-mix(in srgb, var(--warn) 6%, var(--card)); }
+.group li.has-info { cursor: pointer; }
+.group li.has-info:hover, .group li.has-info:focus-visible { background: color-mix(in srgb, var(--accent) 8%, var(--card)); outline: none; }
+
+/* Okienko ze szczegółami punktu */
+.info-dialog { overflow: auto; }
+.info-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.info-badge { font-size: .8rem; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); }
+.info-badge.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.info-badge.off { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); }
+.info-badge.lvl-sredni { color: #a07d10; }
+.info-badge.lvl-trudny { color: var(--bad); }
+.info-section h3 { margin: 0 0 2px; font-size: .95rem; }
+.info-section p { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+.info-dialog .btn { flex: 0 0 auto; }

@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=21">
 </head>
 <body>
   <!-- Ekran startowy: wybór zakresu nauki -->
@@ -95,6 +95,12 @@
       </div>
       <input id="list-search" type="search" placeholder="Szukaj punktu…" autocomplete="off"
              autocorrect="off" spellcheck="false" enterkeyhint="search">
+      <div class="diff-filter" role="group" aria-label="Pokaż punkty o poziomie trudności">
+        <span>Pokaż:</span>
+        <label><input type="checkbox" data-level="łatwy" checked><span class="diff diff-latwy"></span> łatwe</label>
+        <label><input type="checkbox" data-level="średni" checked><span class="diff diff-sredni"></span> średnie</label>
+        <label><input type="checkbox" data-level="trudny" checked><span class="diff diff-trudny"></span> trudne</label>
+      </div>
       <p id="list-message" class="feedback ok" hidden></p>
       <div id="list-edit-tools" class="edit-tools" hidden>
         <button id="list-add-first" class="btn" type="button">＋ Dodaj na początku</button>
@@ -124,6 +130,14 @@
         <label>Wysokość (m) <input id="edit-height" type="number" min="0" max="3000" inputmode="numeric"></label>
       </div>
       <label>Poziom trudności <select id="edit-difficulty"></select></label>
+      <label class="check-row"><input id="edit-on-trail" type="checkbox" checked>
+        <span>Punkt leży na samym szlaku <small class="muted">(odznacz, jeśli to punkt obok szlaku)</small></span></label>
+      <label>Szlaki przez punkt – opcjonalnie
+        <input id="edit-trails" maxlength="500" placeholder="np. czerwony GSB, zielony do Wisły, niebieski na Stożek">
+      </label>
+      <label>Ciekawostki – opcjonalnie
+        <textarea id="edit-notes" maxlength="3000" rows="4" placeholder="Historia miejsca, widoki, schronisko, źródło…"></textarea>
+      </label>
       <label>Mapa punktu (mapy.com) – opcjonalnie
         <input id="edit-map" type="text" maxlength="2000" inputmode="url" autocapitalize="none" spellcheck="false"
                placeholder="kod osadzenia albo https://mapy.com/s/…">
@@ -332,6 +346,28 @@
     <button id="home" class="btn big" type="button">Menu</button>
   </section>
 
+  <!-- Okienko ze szczegółami punktu (lista punktów) -->
+  <dialog id="info-dialog" class="map-dialog info-dialog" aria-labelledby="info-title">
+    <div class="map-head">
+      <div class="bar-title">
+        <strong id="info-title"></strong>
+        <span id="info-sub"></span>
+      </div>
+      <button id="info-close" class="icon-btn" type="button" aria-label="Zamknij">✕</button>
+    </div>
+    <div id="info-badges" class="info-badges"></div>
+    <section id="info-trails-box" class="info-section">
+      <h3>🥾 Szlaki przez punkt</h3>
+      <p id="info-trails"></p>
+    </section>
+    <section id="info-notes-box" class="info-section">
+      <h3>💡 Ciekawostki</h3>
+      <p id="info-notes"></p>
+    </section>
+    <p id="info-empty" class="muted">Brak dodatkowych informacji o tym punkcie.</p>
+    <button id="info-map" class="btn primary" type="button">🗺️ Pokaż na mapie</button>
+  </dialog>
+
   <!-- Okienko z mapą punktu (OpenStreetMap + szlaki Waymarked Trails) -->
   <dialog id="map-dialog" class="map-dialog" aria-labelledby="map-title">
     <div class="map-head">
@@ -348,6 +384,6 @@
     <a id="map-open" class="btn primary map-open" href="#" target="_blank" rel="noopener">Otwórz w mapy.com ↗</a>
   </dialog>
 
-  <script src="app.js?v=23"></script>
+  <script src="app.js?v=24"></script>
 </body>
 </html>

@@ -145,6 +145,9 @@ function point_out(array $p): array
         'map_url' => $p['map_url'] ?? null,
         'lat' => isset($p['lat']) ? (float) $p['lat'] : null,
         'lon' => isset($p['lon']) ? (float) $p['lon'] : null,
+        'on_trail' => !isset($p['on_trail']) || (bool) $p['on_trail'],
+        'trails_info' => $p['trails_info'] ?? null,
+        'notes' => $p['notes'] ?? null,
     ];
 }
 
@@ -226,13 +229,17 @@ function point_fields(array $b): array
         'difficulty' => enum_field($b, 'difficulty', DIFFICULTIES),
         'map_url' => map_url_field($b),
         'coords' => coords_field($b),
+        // Czy punkt leży na samym szlaku (domyślnie tak), czy obok niego.
+        'on_trail' => array_key_exists('on_trail', $b) ? (filter_var($b['on_trail'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0) : 1,
+        'trails_info' => str_field($b, 'trails_info', 500, false),
+        'notes' => str_field($b, 'notes', 3000, false),
     ];
 }
 
 // --- historia zmian punktów (audyt) ---------------------------------------------------
 // Każda zmiana punktu trafia do point_history: kto, kiedy, co (stara → nowa wartość).
 
-const HISTORY_FIELDS = ['label', 'region', 'type', 'height', 'difficulty', 'map_url', 'lat', 'lon'];
+const HISTORY_FIELDS = ['label', 'region', 'type', 'height', 'difficulty', 'on_trail', 'trails_info', 'notes', 'map_url', 'lat', 'lon'];
 
 function point_snapshot(array $p): array
 {
@@ -242,6 +249,9 @@ function point_snapshot(array $p): array
         'type' => $p['type'],
         'height' => $p['height'] === null ? null : (int) $p['height'],
         'difficulty' => $p['difficulty'],
+        'on_trail' => !isset($p['on_trail']) || (bool) $p['on_trail'],
+        'trails_info' => $p['trails_info'] ?? null,
+        'notes' => $p['notes'] ?? null,
         'map_url' => $p['map_url'] ?? null,
         'lat' => isset($p['lat']) ? (float) $p['lat'] : null,
         'lon' => isset($p['lon']) ? (float) $p['lon'] : null,
@@ -331,10 +341,11 @@ function create_point(array $user, array $b): array
     $pdo->prepare('UPDATE points SET position = position + 1 WHERE trail_id = ? AND position >= ?')
         ->execute([$trail, $pos]);
     $pdo->prepare(
-        'INSERT INTO points (trail_id, position, region, label, type, height, difficulty, map_url, lat, lon,
-                             created_at, created_by, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)'
-    )->execute([$trail, $pos, $f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'], $f['map_url'],
+        'INSERT INTO points (trail_id, position, region, label, type, height, difficulty, on_trail, trails_info, notes,
+                             map_url, lat, lon, created_at, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)'
+    )->execute([$trail, $pos, $f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'],
+        $f['on_trail'], $f['trails_info'], $f['notes'], $f['map_url'],
         $f['coords'][0], $f['coords'][1], $user['id'], $user['id']]);
     $new = find_point((int) $pdo->lastInsertId());
     log_point($user['id'], $new, 'create', point_snapshot($new));
@@ -347,9 +358,10 @@ function update_point(array $user, array $b): array
     $before = find_point($id);
     $f = point_fields($b);
     db()->prepare(
-        'UPDATE points SET region = ?, label = ?, type = ?, height = ?, difficulty = ?, map_url = ?, lat = ?, lon = ?,
-         updated_by = ? WHERE id = ?'
-    )->execute([$f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'], $f['map_url'],
+        'UPDATE points SET region = ?, label = ?, type = ?, height = ?, difficulty = ?, on_trail = ?, trails_info = ?,
+         notes = ?, map_url = ?, lat = ?, lon = ?, updated_by = ? WHERE id = ?'
+    )->execute([$f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'],
+        $f['on_trail'], $f['trails_info'], $f['notes'], $f['map_url'],
         $f['coords'][0], $f['coords'][1], $user['id'], $id]);
     $after = find_point($id);
     // Do historii tylko pola, które naprawdę się zmieniły.

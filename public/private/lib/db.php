@@ -66,6 +66,9 @@ function create_schema(): void
             type ENUM('góra','przełęcz','schronisko','miasto','polana','inne') NOT NULL,
             height SMALLINT NULL,
             difficulty ENUM('łatwy','średni','trudny') NOT NULL DEFAULT 'łatwy',
+            on_trail TINYINT(1) NOT NULL DEFAULT 1,
+            trails_info VARCHAR(500) NULL,
+            notes TEXT NULL,
             map_url VARCHAR(500) NULL,
             lat DECIMAL(10,7) NULL,
             lon DECIMAL(10,7) NULL,
@@ -163,6 +166,12 @@ function migrate_schema(): array
     if ($col('points', 'lat') === false) {
         $pdo->exec('ALTER TABLE points ADD COLUMN lat DECIMAL(10,7) NULL AFTER map_url, ADD COLUMN lon DECIMAL(10,7) NULL AFTER lat');
         $done[] = 'points.lat/lon';
+    }
+    // 2026-11-21: punkt na szlaku / obok, szlaki przez punkt, ciekawostki
+    if ($col('points', 'on_trail') === false) {
+        $pdo->exec('ALTER TABLE points ADD COLUMN on_trail TINYINT(1) NOT NULL DEFAULT 1 AFTER difficulty,
+            ADD COLUMN trails_info VARCHAR(500) NULL AFTER on_trail, ADD COLUMN notes TEXT NULL AFTER trails_info');
+        $done[] = 'points.on_trail/trails_info/notes';
     }
     // 2026-11-21: autor punktu (created_by / created_at); tabela point_history powstaje w create_schema()
     if ($col('points', 'created_by') === false) {
