@@ -573,3 +573,29 @@ details.setting[open] summary { margin-bottom: 8px; }
   vertical-align: baseline;
 }
 .map-pin:hover, .map-pin:focus-visible { background: color-mix(in srgb, var(--accent) 15%, transparent); outline: none; }
+
+/* Okienko z mapą punktu */
+.map-dialog {
+  width: min(560px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 12px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .35);
+}
+.map-dialog[open] { display: flex; flex-direction: column; gap: 8px; }
+.map-dialog::backdrop { background: rgba(0, 0, 0, .45); }
+.map-head { display: flex; align-items: center; gap: 8px; }
+.map-head .icon-btn { margin-left: auto; }
+.map-box {
+  height: min(58dvh, 440px);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #e8e4da;
+}
+.map-dialog .map-open { flex: 0 0 auto; text-align: center; text-decoration: none; }
+.map-dialog .muted:empty { display: none; }
+.map-box .leaflet-tooltip { font-weight: 600; }

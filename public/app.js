@@ -312,11 +312,115 @@ function labelWithMap(labelEl, p) {
   a.textContent = '🗺️';
   a.title = 'Pokaż na mapie (mapy.com)';
   a.setAttribute('aria-label', `${p.label} – pokaż na mapie mapy.com`);
-  a.addEventListener('click', (e) => e.stopPropagation());
+  a.addEventListener('click', (e) => {
+    // Zwykłe dotknięcie: okienko z mapą na tej stronie. Ctrl/środkowy przycisk: jak zwykły link.
+    e.stopPropagation();
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return;
+    e.preventDefault();
+    openMapDialog(p);
+  });
   a.addEventListener('pointerdown', (e) => e.stopPropagation());
   labelEl.append(' ', a);
   return labelEl;
 }
+
+// --- okienko z mapą punktu: OpenStreetMap + szlaki piesze (Waymarked Trails) ----------------
+// mapy.com nie pozwala osadzać swojej strony, więc pokazujemy własną mapę (Leaflet) w miejscu
+// z linku mapy.com (parametry x = długość, y = szerokość, z = przybliżenie) i dajemy przycisk do mapy.com.
+
+const LEAFLET_URL = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
+let leafletLoading = null;
+let pointMap = null;
+let pointMarker = null;
+
+function loadLeaflet() {
+  if (window.L) return Promise.resolve();
+  if (!leafletLoading) {
+    leafletLoading = new Promise((resolve, reject) => {
+      const css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = `${LEAFLET_URL}leaflet.min.css`;
+      document.head.appendChild(css);
+      const s = document.createElement('script');
+      s.src = `${LEAFLET_URL}leaflet.min.js`;
+      s.onload = resolve;
+      s.onerror = () => {
+        leafletLoading = null;
+        reject(new Error('Nie udało się wczytać mapy.'));
+      };
+      document.head.appendChild(s);
+    });
+  }
+  return leafletLoading;
+}
+
+function coordsFromMapUrl(url) {
+  try {
+    const q = new URL(url).searchParams;
+    const lon = parseFloat(q.get('x'));
+    const lat = parseFloat(q.get('y'));
+    const z = parseFloat(q.get('z'));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    return { lat, lon, zoom: Math.max(6, Math.min(17, Math.round(Number.isFinite(z) ? z : 15))) };
+  } catch {
+    return null;
+  }
+}
+
+async function openMapDialog(p) {
+  const url = safeMapUrl(p.map_url);
+  if (!url) return;
+  const c = coordsFromMapUrl(url);
+  if (!c) {
+    // Link bez współrzędnych (np. krótki link) – od razu na mapy.com.
+    window.open(url, '_blank', 'noopener');
+    return;
+  }
+  const dlg = $('map-dialog');
+  $('map-title').textContent = p.label;
+  $('map-sub').textContent = [p.typ_punktu, p.height ? `${p.height} m` : null, p.name_mountain_part].filter(Boolean).join(' · ');
+  $('map-open').href = url;
+  $('map-status').textContent = 'Wczytywanie mapy…';
+  if (!dlg.open) dlg.showModal();
+  try {
+    await loadLeaflet();
+  } catch (err) {
+    $('map-status').textContent = `✗ ${err.message} Otwórz punkt w mapy.com.`;
+    return;
+  }
+  $('map-status').textContent = '';
+  if (!pointMap) {
+    pointMap = L.map('map-box', { zoomControl: true });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+    }).addTo(pointMap);
+    L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      opacity: 0.85,
+      attribution: 'szlaki: <a href="https://hiking.waymarkedtrails.org" target="_blank" rel="noopener">Waymarked Trails</a>',
+    }).addTo(pointMap);
+  }
+  // Okienko jest już otwarte, więc mapa zna swój rozmiar: najpierw rozmiar, potem widok.
+  pointMap.invalidateSize();
+  pointMap.setView([c.lat, c.lon], c.zoom);
+  if (pointMarker) pointMarker.remove();
+  pointMarker = L.circleMarker([c.lat, c.lon], {
+    radius: 9, color: '#fff', weight: 3, fillColor: '#c0392b', fillOpacity: 1,
+  }).addTo(pointMap).bindTooltip(p.label, { permanent: true, direction: 'top', offset: [0, -10] });
+  // Na wszelki wypadek jeszcze raz po ułożeniu okienka (np. po animacji otwierania).
+  setTimeout(() => pointMap.invalidateSize(), 200);
+}
+
+$('map-close').addEventListener('click', () => $('map-dialog').close());
+// Dotknięcie przyciemnionego tła zamyka okienko.
+$('map-dialog').addEventListener('click', (e) => {
+  const dlg = $('map-dialog');
+  if (e.target !== dlg) return;
+  const r = dlg.getBoundingClientRect();
+  const outside = e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+  if (outside) dlg.close();
+});
 
 // Nazwa punktu bez dopisku w nawiasie – do krótkich nagłówków („Bielsko-Biała (Straconka)” → „Bielsko-Biała”).
 const shortLabel = (label) => label.replace(/\s*\([^)]*\)/, '');

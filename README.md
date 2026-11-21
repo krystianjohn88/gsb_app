@@ -74,7 +74,8 @@ minut łączyć nową stronę ze starym skryptem z pamięci podręcznej.
 ```
 
 `typ_punktu`: `góra` | `przełęcz` | `schronisko` | `miasto` | `polana` | `inne`; `height` (m n.p.m.) i `map_url`
-(link do punktu na mapy.com – ikonka 🗺️ przy nazwie) są opcjonalne.
+(link do punktu na mapy.com – ikonka 🗺️ przy nazwie) są opcjonalne. Ikonka otwiera okienko z mapą OpenStreetMap
+i szlakami (Waymarked Trails, Leaflet z cdnjs) w miejscu z linku (`x`, `y`, `z`), z przyciskiem do mapy.com.
 Pliki służą do pierwszego importu i do trybu bez bazy – po imporcie punkty edytuje się w aplikacji (baza).
 
 ## Lokalnie w Dockerze (bez bazy)

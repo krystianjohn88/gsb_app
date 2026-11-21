@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=17">
+  <link rel="stylesheet" href="styles.css?v=18">
 </head>
 <body>
   <!-- Ekran startowy: wybór zakresu nauki -->
@@ -305,6 +305,20 @@
     <button id="home" class="btn big" type="button">Menu</button>
   </section>
 
-  <script src="app.js?v=17"></script>
+  <!-- Okienko z mapą punktu (OpenStreetMap + szlaki Waymarked Trails) -->
+  <dialog id="map-dialog" class="map-dialog" aria-labelledby="map-title">
+    <div class="map-head">
+      <div class="bar-title">
+        <strong id="map-title"></strong>
+        <span id="map-sub"></span>
+      </div>
+      <button id="map-close" class="icon-btn" type="button" aria-label="Zamknij mapę">✕</button>
+    </div>
+    <div id="map-box" class="map-box"></div>
+    <p id="map-status" class="muted" aria-live="polite"></p>
+    <a id="map-open" class="btn primary map-open" href="#" target="_blank" rel="noopener">Otwórz w mapy.com ↗</a>
+  </dialog>
+
+  <script src="app.js?v=19"></script>
 </body>
 </html>
