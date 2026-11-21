@@ -73,7 +73,8 @@ minut łączyć nową stronę ze starym skryptem z pamięci podręcznej.
 { "id": 1, "name_mountain_part": "Beskid Niski", "label": "Chełm", "typ_punktu": "góra", "height": 778 }
 ```
 
-`typ_punktu`: `góra` | `przełęcz` | `schronisko` | `miasto` | `polana` | `inne`; `height` (m n.p.m.) opcjonalne.
+`typ_punktu`: `góra` | `przełęcz` | `schronisko` | `miasto` | `polana` | `inne`; `height` (m n.p.m.) i `map_url`
+(link do punktu na mapy.com – ikonka 🗺️ przy nazwie) są opcjonalne.
 Pliki służą do pierwszego importu i do trybu bez bazy – po imporcie punkty edytuje się w aplikacji (baza).
 
 ## Lokalnie w Dockerze (bez bazy)

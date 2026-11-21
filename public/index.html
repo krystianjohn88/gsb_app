@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
   <!-- Ekran startowy: wybór zakresu nauki -->
@@ -121,6 +121,10 @@
         <label>Wysokość (m) <input id="edit-height" type="number" min="0" max="3000" inputmode="numeric"></label>
       </div>
       <label>Poziom trudności <select id="edit-difficulty"></select></label>
+      <label>Link do mapy (mapy.com) – opcjonalnie
+        <input id="edit-map" type="url" maxlength="500" inputmode="url" autocapitalize="none" spellcheck="false"
+               placeholder="https://mapy.com/pl/turisticka?…">
+      </label>
       <p id="edit-message" class="feedback" aria-live="polite"></p>
       <button class="btn primary big" type="submit">💾 Zapisz</button>
       <div class="actions edit-existing">
@@ -301,6 +305,6 @@
     <button id="home" class="btn big" type="button">Menu</button>
   </section>
 
-  <script src="app.js?v=16"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

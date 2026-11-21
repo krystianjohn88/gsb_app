@@ -3,7 +3,8 @@
     "id": 1,
     "name_mountain_part": "Beskid Śląski",
     "label": "Ustroń",
-    "typ_punktu": "miasto"
+    "typ_punktu": "miasto",
+    "map_url": "https://mapy.com/pl/turisticka?source=osm&id=11883010&x=18.8164630&y=49.7237937&z=15.748"
   },
   {
     "id": 2,

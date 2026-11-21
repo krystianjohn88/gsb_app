@@ -298,6 +298,26 @@ function safeMapUrl(value) {
   }
 }
 
+// Nazwa punktu + ikonka 🗺️ do mapy.com (tylko gdy punkt ma link). Kliknięcie ikonki nie otwiera
+// edytora ani nie zaczyna przeciągania kafelka.
+function labelWithMap(labelEl, p) {
+  labelEl.textContent = p.label;
+  const url = safeMapUrl(p.map_url);
+  if (!url) return labelEl;
+  const a = document.createElement('a');
+  a.className = 'map-pin';
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.textContent = '🗺️';
+  a.title = 'Pokaż na mapie (mapy.com)';
+  a.setAttribute('aria-label', `${p.label} – pokaż na mapie mapy.com`);
+  a.addEventListener('click', (e) => e.stopPropagation());
+  a.addEventListener('pointerdown', (e) => e.stopPropagation());
+  labelEl.append(' ', a);
+  return labelEl;
+}
+
 // Nazwa punktu bez dopisku w nawiasie – do krótkich nagłówków („Bielsko-Biała (Straconka)” → „Bielsko-Biała”).
 const shortLabel = (label) => label.replace(/\s*\([^)]*\)/, '');
 
@@ -458,7 +478,7 @@ async function showList({ keepScroll = false } = {}) {
     ico.textContent = TYPE_ICON[p.typ_punktu] || '•';
     const label = document.createElement('span');
     label.className = 'label';
-    label.textContent = p.label;
+    labelWithMap(label, p);
     const meta = document.createElement('small');
     meta.textContent = p.height ? `${p.typ_punktu} · ${p.height} m` : p.typ_punktu;
     li.append(nr, ico, label, meta);
@@ -727,6 +747,7 @@ function openEditor(point, { afterId = null, insertAt = null, region = null } = 
   fillSelect($('edit-type'), TYPES, isNew ? 'góra' : point.typ_punktu);
   $('edit-height').value = isNew || point.height == null ? '' : point.height;
   fillSelect($('edit-difficulty'), DIFFICULTIES, isNew ? 'łatwy' : (point.difficulty || 'łatwy'));
+  $('edit-map').value = isNew ? '' : (point.map_url || '');
   document.querySelectorAll('.edit-existing').forEach((el) => { el.hidden = isNew; });
   setEditMessage('', '');
   show('edit');
@@ -746,6 +767,7 @@ function editFormData() {
     type: $('edit-type').value,
     height: $('edit-height').value,
     difficulty: $('edit-difficulty').value,
+    map_url: $('edit-map').value.trim(),
   };
 }
 
@@ -1158,7 +1180,7 @@ function addDone(point, kind, score) {
   ico.textContent = TYPE_ICON[point.typ_punktu] || '•';
   const label = document.createElement('span');
   label.className = 'label';
-  label.textContent = point.label;
+  labelWithMap(label, point);
   const meta = document.createElement('small');
   meta.textContent = score !== undefined && score < 100
     ? `${point.typ_punktu} · ${score}%`
@@ -1476,7 +1498,7 @@ function pointBox(el, p) {
   ico.textContent = TYPE_ICON[p.typ_punktu] || '•';
   const label = document.createElement('span');
   label.className = 'label';
-  label.textContent = p.label;
+  labelWithMap(label, p);
   const meta = document.createElement('small');
   meta.textContent = p.height ? `${p.typ_punktu} · ${p.height} m` : p.typ_punktu;
   el.append(ico, label, meta);

@@ -142,7 +142,26 @@ function point_out(array $p): array
         'typ_punktu' => $p['type'],
         'height' => $p['height'] === null ? null : (int) $p['height'],
         'difficulty' => $p['difficulty'],
+        'map_url' => $p['map_url'] ?? null,
     ];
+}
+
+// Opcjonalny link do mapy: tylko https i tylko mapy.com / mapy.cz.
+function map_url_field(array $b): ?string
+{
+    $v = isset($b['map_url']) ? trim((string) $b['map_url']) : '';
+    if ($v === '') {
+        return null;
+    }
+    if (mb_strlen($v) > 500) {
+        fail(422, 'Link do mapy jest za długi (max 500 znaków).');
+    }
+    $p = parse_url($v);
+    $host = strtolower($p['host'] ?? '');
+    if (($p['scheme'] ?? '') !== 'https' || !preg_match('/(^|\.)mapy\.(com|cz)$/', $host)) {
+        fail(422, 'Link do mapy musi zaczynać się od https://mapy.com/ (albo mapy.cz).');
+    }
+    return $v;
 }
 
 function find_point(int $id): array
@@ -164,6 +183,7 @@ function point_fields(array $b): array
         'type' => enum_field($b, 'type', TYPES),
         'height' => height_field($b),
         'difficulty' => enum_field($b, 'difficulty', DIFFICULTIES),
+        'map_url' => map_url_field($b),
     ];
 }
 
@@ -192,9 +212,9 @@ function create_point(array $user, array $b): array
     $pdo->prepare('UPDATE points SET position = position + 1 WHERE trail_id = ? AND position >= ?')
         ->execute([$trail, $pos]);
     $pdo->prepare(
-        'INSERT INTO points (trail_id, position, region, label, type, height, difficulty, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    )->execute([$trail, $pos, $f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'], $user['id']]);
+        'INSERT INTO points (trail_id, position, region, label, type, height, difficulty, map_url, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    )->execute([$trail, $pos, $f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'], $f['map_url'], $user['id']]);
     return point_out(find_point((int) $pdo->lastInsertId()));
 }
 
@@ -204,8 +224,8 @@ function update_point(array $user, array $b): array
     find_point($id);
     $f = point_fields($b);
     db()->prepare(
-        'UPDATE points SET region = ?, label = ?, type = ?, height = ?, difficulty = ?, updated_by = ? WHERE id = ?'
-    )->execute([$f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'], $user['id'], $id]);
+        'UPDATE points SET region = ?, label = ?, type = ?, height = ?, difficulty = ?, map_url = ?, updated_by = ? WHERE id = ?'
+    )->execute([$f['region'], $f['label'], $f['type'], $f['height'], $f['difficulty'], $f['map_url'], $user['id'], $id]);
     return point_out(find_point($id));
 }
 

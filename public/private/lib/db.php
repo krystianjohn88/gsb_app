@@ -66,6 +66,7 @@ function create_schema(): void
             type ENUM('góra','przełęcz','schronisko','miasto','polana','inne') NOT NULL,
             height SMALLINT NULL,
             difficulty ENUM('łatwy','średni','trudny') NOT NULL DEFAULT 'łatwy',
+            map_url VARCHAR(500) NULL,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             updated_by INT NULL,
             INDEX idx_trail_pos (trail_id, position),
@@ -133,6 +134,11 @@ function migrate_schema(): array
         $pdo->exec('ALTER TABLE trails ADD COLUMN map_url VARCHAR(500) NULL AFTER color');
         $done[] = 'trails.map_url';
     }
+    // 2026-11-21: link do mapy przy punkcie (opcjonalny)
+    if ($col('points', 'map_url') === false) {
+        $pdo->exec('ALTER TABLE points ADD COLUMN map_url VARCHAR(500) NULL AFTER difficulty');
+        $done[] = 'points.map_url';
+    }
     $file = __DIR__ . '/../../data/trails.json';
     if (is_file($file)) {
         $upd = $pdo->prepare('UPDATE trails SET map_url = ? WHERE id = ? AND map_url IS NULL');
@@ -162,8 +168,8 @@ function import_json_data(string $dataDir): array
     try {
         $insTrail = $pdo->prepare('INSERT INTO trails (id, name, short, color, map_url, sort) VALUES (?, ?, ?, ?, ?, ?)');
         $insPoint = $pdo->prepare(
-            'INSERT INTO points (trail_id, position, region, label, type, height, difficulty)
-             VALUES (?, ?, ?, ?, ?, ?, \'łatwy\')'
+            'INSERT INTO points (trail_id, position, region, label, type, height, difficulty, map_url)
+             VALUES (?, ?, ?, ?, ?, ?, \'łatwy\', ?)'
         );
         foreach ($trails as $i => $t) {
             $insTrail->execute([$t['id'], $t['name'], $t['short'], $t['color'], $t['map_url'] ?? null, $i + 1]);
@@ -173,6 +179,7 @@ function import_json_data(string $dataDir): array
                 $insPoint->execute([
                     $t['id'], $pos + 1, $p['name_mountain_part'], $p['label'], $p['typ_punktu'],
                     isset($p['height']) ? (int) $p['height'] : null,
+                    $p['map_url'] ?? null,
                 ]);
             }
             $counts[$t['id']] = count($points);
