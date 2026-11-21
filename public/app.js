@@ -1502,8 +1502,92 @@ async function showUsers() {
   [...$('new-role').options].forEach((o) => { o.textContent = ROLE_LABEL[o.value]; });
   $('users-message').textContent = '';
   show('users');
+  renderStats();
   await renderUsers();
 }
+
+// --- licznik wejść (statystyki dla administratora) ------------------------------------------
+
+async function renderStats() {
+  const box = $('stats-summary');
+  box.textContent = 'Wczytywanie…';
+  try {
+    const s = await api('stats');
+    box.replaceChildren();
+    const tile = (label, d) => {
+      const div = document.createElement('div');
+      div.className = 'stat';
+      const strong = document.createElement('strong');
+      strong.textContent = d.visits;
+      const small = document.createElement('small');
+      small.textContent = `${label} · nowych: ${d.new}`;
+      div.append(strong, small);
+      box.appendChild(div);
+    };
+    tile('dziś', s.today);
+    tile('7 dni', s.last7);
+    tile('30 dni', s.last30);
+    tile('łącznie', s.total);
+    const tbody = $('stats-days');
+    tbody.replaceChildren(...s.days.map((d) => {
+      const tr = document.createElement('tr');
+      const day = new Date(`${d.day}T12:00:00`).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' });
+      for (const v of [day, d.visits, d.unique, d.new]) {
+        const td = document.createElement('td');
+        td.textContent = v;
+        tr.appendChild(td);
+      }
+      return tr;
+    }));
+    $('stats-note').textContent = s.since
+      ? `Liczone od ${formatDate(`${s.since} 00:00:00`).replace(/,.*$/, '')}. Wejście = otwarcie aplikacji (raz na sesję przeglądarki); `
+        + `„osoby” – różne przeglądarki danego dnia; „nowi” – pierwsze wejście w ogóle. Różnych przeglądarek łącznie: ${s.total.visitors}.`
+      : 'Brak jeszcze zarejestrowanych wejść.';
+  } catch (err) {
+    box.textContent = `✗ ${err.message}`;
+  }
+}
+
+// --- wejście do aplikacji: licznik i powitanie przy pierwszym wejściu --------------------------
+
+function storageGet(store, key) {
+  try { return store.getItem(key); } catch { return null; }
+}
+function storageSet(store, key, value) {
+  try { store.setItem(key, value); } catch {}
+}
+
+// Losowy identyfikator przeglądarki (bez danych osobowych); w bazie tylko jego skrót.
+function visitorId() {
+  let vid = storageGet(localStorage, 'gsb.vid');
+  if (!/^[a-f0-9]{32}$/.test(vid || '')) {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    vid = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+    storageSet(localStorage, 'gsb.vid', vid);
+  }
+  return vid;
+}
+
+// Jedno wejście na sesję przeglądarki (odświeżanie strony nie nabija licznika).
+function countVisit() {
+  if (!state.api || storageGet(sessionStorage, 'gsb.counted')) return;
+  storageSet(sessionStorage, 'gsb.counted', '1');
+  api('visit', { method: 'POST', body: { vid: visitorId() } }).catch(() => {});
+}
+
+// Pierwsze wejście w tej przeglądarce i brak logowania → propozycja konta (tylko raz).
+function maybeWelcome() {
+  if (!state.api || state.user || storageGet(localStorage, 'gsb.welcomed')) return;
+  if (!$('screen-start').classList.contains('active')) return; // np. przyszedł z linku z e-maila
+  storageSet(localStorage, 'gsb.welcomed', '1');
+  $('welcome-dialog').showModal();
+}
+
+$('welcome-register').addEventListener('click', () => { $('welcome-dialog').close(); showRegister(); });
+$('welcome-login').addEventListener('click', () => { $('welcome-dialog').close(); showLogin(); });
+$('welcome-later').addEventListener('click', () => $('welcome-dialog').close());
+$('welcome-close').addEventListener('click', () => $('welcome-dialog').close());
 
 function setUsersMessage(text, kind) {
   const el = $('users-message');
@@ -2221,6 +2305,10 @@ loadTrails()
     return selectTrail(state.trail);
   })
   .then(handleVerifyLink)
+  .then(() => {
+    countVisit();
+    maybeWelcome();
+  })
   .catch((err) => {
     $('parts').innerHTML = `<li class="error">Nie udało się wczytać danych: ${err.message}</li>`;
   });

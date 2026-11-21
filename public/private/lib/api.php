@@ -643,6 +643,67 @@ function verify_email(array $b): array
     return ['login' => $u['login'], 'verified' => true];
 }
 
+// --- licznik wejść ------------------------------------------------------------------------
+// Przeglądarka wysyła raz na sesję losowy identyfikator (vid). Zapisujemy tylko jego skrót:
+// wejścia, unikalnych odwiedzających danego dnia i nowych (pierwsze wejście w ogóle).
+
+function record_visit(array $b): array
+{
+    $vid = (string) ($b['vid'] ?? '');
+    if (!preg_match('/^[a-f0-9]{32}$/', $vid)) {
+        fail(422, 'Nieprawidłowy identyfikator.');
+    }
+    try {
+        rate_limit('visit:' . client_ip(), 60, 3600);   // zabezpieczenie przed nabijaniem licznika
+    } catch (ApiError $e) {
+        return ['counted' => false];
+    }
+    $pdo = db();
+    $hash = hash('sha256', 'szlaki-visit|' . $vid);
+    $day = date('Y-m-d');
+    $st = $pdo->prepare('INSERT IGNORE INTO visitors (visitor_hash) VALUES (?)');
+    $st->execute([$hash]);
+    $isNew = $st->rowCount() === 1;
+    $st = $pdo->prepare('INSERT IGNORE INTO visit_days (day, visitor_hash) VALUES (?, ?)');
+    $st->execute([$day, $hash]);
+    $isUniqueToday = $st->rowCount() === 1;
+    $pdo->prepare(
+        'INSERT INTO visit_stats (day, visits, unique_visitors, new_visitors) VALUES (?, 1, ?, ?)
+         ON DUPLICATE KEY UPDATE visits = visits + 1, unique_visitors = unique_visitors + VALUES(unique_visitors),
+                                 new_visitors = new_visitors + VALUES(new_visitors)'
+    )->execute([$day, $isUniqueToday ? 1 : 0, $isNew ? 1 : 0]);
+    // Szczegóły „kto którego dnia” potrzebne tylko do liczenia unikalnych – starsze niż 60 dni kasujemy.
+    $pdo->prepare('DELETE FROM visit_days WHERE day < ?')->execute([date('Y-m-d', time() - 60 * 86400)]);
+    return ['counted' => true, 'new' => $isNew];
+}
+
+function visit_stats(): array
+{
+    $pdo = db();
+    $sum = function (?int $days) use ($pdo): array {
+        $sql = 'SELECT COALESCE(SUM(visits),0) v, COALESCE(SUM(unique_visitors),0) u, COALESCE(SUM(new_visitors),0) n FROM visit_stats';
+        $st = $days === null ? $pdo->query($sql) : $pdo->prepare($sql . ' WHERE day > ?');
+        if ($days !== null) {
+            $st->execute([date('Y-m-d', time() - $days * 86400)]);
+        }
+        $r = $st->fetch();
+        return ['visits' => (int) $r['v'], 'unique_days' => (int) $r['u'], 'new' => (int) $r['n']];
+    };
+    $st = $pdo->prepare('SELECT day, visits, unique_visitors, new_visitors FROM visit_stats WHERE day > ? ORDER BY day DESC');
+    $st->execute([date('Y-m-d', time() - 14 * 86400)]);
+    return [
+        'today' => $sum(1),
+        'last7' => $sum(7),
+        'last30' => $sum(30),
+        'total' => $sum(null) + ['visitors' => (int) $pdo->query('SELECT COUNT(*) FROM visitors')->fetchColumn()],
+        'since' => $pdo->query('SELECT MIN(day) FROM visit_stats')->fetchColumn() ?: null,
+        'days' => array_map(function ($r) {
+            return ['day' => $r['day'], 'visits' => (int) $r['visits'], 'unique' => (int) $r['unique_visitors'],
+                'new' => (int) $r['new_visitors']];
+        }, $st->fetchAll()),
+    ];
+}
+
 // Nowy link na prośbę (np. z ekranu logowania). Zawsze ta sama odpowiedź – nie zdradza, czy konto istnieje.
 function resend_verification(array $b): array
 {
@@ -873,6 +934,12 @@ function handle_request(string $method, string $route, array $query, array $body
 
             case 'POST login':
                 return [200, login($body)];
+
+            case 'POST visit':
+                return [200, record_visit($body)];
+            case 'GET stats':
+                require_role($me, ['admin']);
+                return [200, visit_stats()];
 
             case 'GET register_info':
                 return [200, registration_info()];

@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=25">
+  <link rel="stylesheet" href="styles.css?v=26">
 </head>
 <body>
   <!-- Ekran startowy: wybór zakresu nauki -->
@@ -269,6 +269,18 @@
       <button id="users-back" class="icon-btn" type="button" aria-label="Wróć">←</button>
       <div class="bar-title"><strong>👥 Użytkownicy</strong></div>
     </header>
+    <section class="setting visit-stats" aria-labelledby="stats-title">
+      <strong id="stats-title">📊 Wejścia do aplikacji</strong>
+      <div id="stats-summary" class="stats-grid"></div>
+      <details>
+        <summary>Ostatnie 14 dni</summary>
+        <table class="stats-days">
+          <thead><tr><th>Dzień</th><th>Wejścia</th><th>Osoby</th><th>Nowi</th></tr></thead>
+          <tbody id="stats-days"></tbody>
+        </table>
+      </details>
+      <small id="stats-note" class="muted"></small>
+    </section>
     <p id="users-message" class="feedback" aria-live="polite"></p>
     <ul id="users-list" class="users"></ul>
     <form id="new-user-form" class="form setting" autocomplete="off">
@@ -379,6 +391,19 @@
     <button id="home" class="btn big" type="button">Menu</button>
   </section>
 
+  <!-- Powitanie przy pierwszym wejściu (niezalogowany) -->
+  <dialog id="welcome-dialog" class="map-dialog info-dialog welcome-dialog" aria-labelledby="welcome-title">
+    <div class="map-head">
+      <div class="bar-title"><strong id="welcome-title">👋 Witaj w aplikacji!</strong></div>
+      <button id="welcome-close" class="icon-btn" type="button" aria-label="Zamknij">✕</button>
+    </div>
+    <p>Ucz się kolejnych punktów szlaków Beskidów – możesz od razu, bez konta.</p>
+    <p>Z <strong>darmowym kontem</strong> aplikacja zapisuje Twoje wyniki i historię nauki, więc widzisz swoje postępy.</p>
+    <button id="welcome-register" class="btn primary" type="button">Załóż konto</button>
+    <button id="welcome-login" class="btn" type="button">Mam konto – zaloguj się</button>
+    <button id="welcome-later" class="link-btn" type="button">Może później</button>
+  </dialog>
+
   <!-- Okienko z informacjami o szlaku (ℹ️ przy nazwie szlaku) -->
   <dialog id="trail-dialog" class="map-dialog info-dialog" aria-labelledby="trail-info-title">
     <div class="map-head">
@@ -431,6 +456,6 @@
     <a id="map-open" class="btn primary map-open" href="#" target="_blank" rel="noopener">Otwórz w mapy.com ↗</a>
   </dialog>
 
-  <script src="app.js?v=26"></script>
+  <script src="app.js?v=27"></script>
 </body>
 </html>

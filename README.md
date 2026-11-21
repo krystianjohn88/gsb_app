@@ -62,6 +62,10 @@ Aplikacja liczy zgodność w procentach (odległość Levenshteina) i zalicza od
 - **Ustawienia tylko w bazie** (tabela `settings`, np. w phpMyAdmin): `max_users` – limit wszystkich kont (domyślnie 100),
   `registration_open` – `1` rejestracja otwarta, `0` zamknięta.
   Przykład: `UPDATE settings SET value = '200' WHERE name = 'max_users';`
+- **Licznik wejść:** tabele `visit_stats`, `visitors`, `visit_days` – wejście = otwarcie aplikacji (raz na sesję
+  przeglądarki), bez adresów IP: przeglądarka ma losowy identyfikator, w bazie tylko jego skrót. Administrator widzi
+  statystyki w „👥 Użytkownicy” (dziś, 7 i 30 dni, łącznie, ostatnie 14 dni).
+- **Pierwsze wejście:** niezalogowany użytkownik raz widzi powitanie z propozycją założenia konta lub zalogowania.
 - Bez API (np. lokalnie w Dockerze) aplikacja sama czyta `data/*.json` – tylko nauka, bez kont.
 
 ### Instalacja na nowym serwerze

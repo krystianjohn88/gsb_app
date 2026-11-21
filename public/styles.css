@@ -704,3 +704,19 @@ body.drag-active .insert-btn { display: none; }
 #register-done p { margin: 0; }
 .u-name { flex-wrap: wrap; }
 .u-name small { overflow-wrap: anywhere; }
+
+/* Powitanie przy pierwszym wejściu */
+.welcome-dialog p { margin: 0; }
+.welcome-dialog .btn { flex: 0 0 auto; }
+.welcome-dialog .link-btn { align-self: center; }
+
+/* Statystyki wejść (administrator) */
+.visit-stats { gap: 8px; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.stat { display: grid; justify-items: center; padding: 8px 4px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, var(--card)); text-align: center; }
+.stat strong { font-size: 1.3rem; color: var(--accent); font-variant-numeric: tabular-nums; }
+.stat small { color: var(--muted); font-size: .72rem; line-height: 1.2; }
+.stats-days { width: 100%; border-collapse: collapse; font-size: .88rem; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.stats-days th, .stats-days td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--border); }
+.stats-days th:first-child, .stats-days td:first-child { text-align: left; }
+.stats-days th { color: var(--muted); font-weight: 600; }

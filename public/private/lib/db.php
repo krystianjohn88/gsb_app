@@ -100,6 +100,23 @@ function create_schema(): void
             INDEX idx_bucket (bucket, created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_polish_ci",
 
+        // Licznik wejść. Bez adresów IP: przeglądarka ma losowy identyfikator, w bazie tylko jego skrót.
+        "CREATE TABLE IF NOT EXISTS visit_stats (
+            day DATE PRIMARY KEY,
+            visits INT NOT NULL DEFAULT 0,
+            unique_visitors INT NOT NULL DEFAULT 0,
+            new_visitors INT NOT NULL DEFAULT 0
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_polish_ci",
+        "CREATE TABLE IF NOT EXISTS visitors (
+            visitor_hash CHAR(64) PRIMARY KEY,
+            first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_polish_ci",
+        "CREATE TABLE IF NOT EXISTS visit_days (
+            day DATE NOT NULL,
+            visitor_hash CHAR(64) NOT NULL,
+            PRIMARY KEY (day, visitor_hash)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_polish_ci",
+
         "CREATE TABLE IF NOT EXISTS points (
             id INT AUTO_INCREMENT PRIMARY KEY,
             trail_id VARCHAR(20) NOT NULL,
