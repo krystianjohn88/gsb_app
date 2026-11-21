@@ -438,13 +438,21 @@ function save_result(array $me, array $b): array
     return ['id' => (int) db()->lastInsertId()];
 }
 
-function list_results(array $me): array
+// Historia wyników: własna, a administrator może podać ?user=<id>, żeby zobaczyć cudzą.
+function list_results(array $me, array $query = []): array
 {
+    $userId = $me['id'];
+    if (isset($query['user']) && $query['user'] !== '' && (int) $query['user'] !== $me['id']) {
+        if ($me['role'] !== 'admin') {
+            fail(403, 'Tylko administrator może oglądać wyniki innych osób.');
+        }
+        $userId = (int) find_user(int_field($query, 'user', 1, PHP_INT_MAX))['id'];
+    }
     $st = db()->prepare(
         'SELECT r.*, t.short FROM results r JOIN trails t ON t.id = r.trail_id
          WHERE r.user_id = ? ORDER BY r.created_at DESC, r.id DESC LIMIT 200'
     );
-    $st->execute([$me['id']]);
+    $st->execute([$userId]);
     return array_map(function ($r) {
         return [
             'id' => (int) $r['id'],
@@ -528,7 +536,7 @@ function handle_request(string $method, string $route, array $query, array $body
             case 'POST results':
                 return [201, save_result(require_role($me, ROLES), $body)];
             case 'GET results':
-                return [200, list_results(require_role($me, ROLES))];
+                return [200, list_results(require_role($me, ROLES), $query)];
         }
         return [404, ['error' => 'Nieznany adres API.']];
     } catch (ApiError $e) {

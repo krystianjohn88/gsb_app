@@ -882,15 +882,18 @@ function formatDuration(sec) {
   return m ? `${m} min ${sec % 60} s` : `${sec} s`;
 }
 
-async function renderHistory() {
-  const box = $('history');
+// Historia wyników: własna (userId = null) albo – dla administratora – wybranej osoby.
+// Zwraca liczbę wyników (albo null przy błędzie).
+async function renderHistory({ box = $('history'), userId = null } = {}) {
   box.innerHTML = '<li class="muted">Wczytywanie…</li>';
   try {
-    const rows = await api('results');
+    const rows = await api('results', userId ? { query: { user: userId } } : {});
     box.innerHTML = '';
     if (!rows.length) {
-      box.innerHTML = '<li class="muted">Brak wyników – ukończ naukę pasma albo szlaku, a pojawi się tutaj.</li>';
-      return;
+      box.innerHTML = userId
+        ? '<li class="muted">Ta osoba nie ma jeszcze żadnych wyników.</li>'
+        : '<li class="muted">Brak wyników – ukończ naukę pasma albo szlaku, a pojawi się tutaj.</li>';
+      return 0;
     }
     for (const r of rows) {
       const li = document.createElement('li');
@@ -913,14 +916,27 @@ async function renderHistory() {
       li.append(head, body);
       box.appendChild(li);
     }
+    return rows.length;
   } catch (err) {
     box.innerHTML = '';
     const li = document.createElement('li');
     li.className = 'error';
     li.textContent = `Nie udało się wczytać wyników: ${err.message}`;
     box.appendChild(li);
+    return null;
   }
 }
+
+// Wyniki wybranej osoby (tylko administrator, z listy użytkowników).
+async function showUserResults(u) {
+  $('user-results-title').textContent = `📈 Wyniki: ${u.login}`;
+  $('user-results-sub').textContent = ROLE_LABEL[u.role] || u.role;
+  show('user-results');
+  const n = await renderHistory({ box: $('user-history'), userId: u.id });
+  if (n !== null) $('user-results-sub').textContent = `${ROLE_LABEL[u.role] || u.role} · wyników: ${n}`;
+}
+
+$('user-results-back').addEventListener('click', () => showUsers());
 
 $('account-back').addEventListener('click', () => show('start'));
 $('account-logout').addEventListener('click', async () => {
@@ -1065,7 +1081,15 @@ async function renderUsers() {
 
     const actions = document.createElement('div');
     actions.className = 'u-actions';
-    actions.append(role, pw, del);
+    const stats = document.createElement('button');
+    stats.type = 'button';
+    stats.className = 'pill small';
+    stats.textContent = '📈';
+    stats.title = 'Wyniki';
+    stats.setAttribute('aria-label', `Wyniki: ${u.login}`);
+    stats.addEventListener('click', () => showUserResults(u));
+
+    actions.append(role, pw, stats, del);
     li.append(name, actions);
     box.appendChild(li);
   }
