@@ -599,3 +599,4 @@ details.setting[open] summary { margin-bottom: 8px; }
 .map-dialog .map-open { flex: 0 0 auto; text-align: center; text-decoration: none; }
 .map-dialog .muted:empty { display: none; }
 .map-box .leaflet-tooltip { font-weight: 600; }
+.map-frame { display: block; width: 100%; border: 1px solid var(--border); background: #e8e4da; }

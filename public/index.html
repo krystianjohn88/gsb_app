@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=18">
+  <link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body>
   <!-- Ekran startowy: wybór zakresu nauki -->
@@ -121,9 +121,11 @@
         <label>Wysokość (m) <input id="edit-height" type="number" min="0" max="3000" inputmode="numeric"></label>
       </div>
       <label>Poziom trudności <select id="edit-difficulty"></select></label>
-      <label>Link do mapy (mapy.com) – opcjonalnie
-        <input id="edit-map" type="url" maxlength="500" inputmode="url" autocapitalize="none" spellcheck="false"
-               placeholder="https://mapy.com/pl/turisticka?…">
+      <label>Mapa punktu (mapy.com) – opcjonalnie
+        <input id="edit-map" type="text" maxlength="2000" inputmode="url" autocapitalize="none" spellcheck="false"
+               placeholder="kod osadzenia albo https://mapy.com/s/…">
+        <small class="muted">Najlepiej: na mapy.com kliknij punkt → „Udostępnij” → „Osadź mapę” → skopiuj kod i wklej
+          tutaj. Wtedy w aplikacji pokaże się mapa mapy.com z dokładną pinezką. Zwykły link też działa (mapa OpenStreetMap).</small>
       </label>
       <label>Współrzędne punktu – opcjonalnie (dokładne położenie znacznika)
         <input id="edit-coords" maxlength="60" inputmode="text" autocapitalize="none" spellcheck="false"
@@ -320,10 +322,12 @@
       <button id="map-close" class="icon-btn" type="button" aria-label="Zamknij mapę">✕</button>
     </div>
     <div id="map-box" class="map-box"></div>
+    <iframe id="map-frame" class="map-box map-frame" title="Mapa punktu – mapy.com" hidden
+            referrerpolicy="strict-origin-when-cross-origin" allow="fullscreen; geolocation"></iframe>
     <p id="map-status" class="muted" aria-live="polite"></p>
     <a id="map-open" class="btn primary map-open" href="#" target="_blank" rel="noopener">Otwórz w mapy.com ↗</a>
   </dialog>
 
-  <script src="app.js?v=20"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>

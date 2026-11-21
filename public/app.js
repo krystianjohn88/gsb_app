@@ -370,6 +370,24 @@ function coordsFromMapUrl(url) {
 async function openMapDialog(p) {
   const url = safeMapUrl(p.map_url);
   if (!url) return;
+  const dlg = $('map-dialog');
+  const frame = $('map-frame');
+  $('map-title').textContent = p.label;
+  $('map-sub').textContent = [p.typ_punktu, p.height ? `${p.height} m` : null, p.name_mountain_part].filter(Boolean).join(' · ');
+  $('map-open').href = url;
+
+  // Krótki link z „Udostępnij → Osadź” (mapy.com/s/…) mapy.com pozwala osadzić: pokazujemy ich mapę z pinezką.
+  if (isMapyEmbedLink(url)) {
+    $('map-box').hidden = true;
+    frame.hidden = false;
+    if (frame.getAttribute('src') !== url) frame.setAttribute('src', url);
+    $('map-status').textContent = '';
+    if (!dlg.open) dlg.showModal();
+    return;
+  }
+  frame.hidden = true;
+  $('map-box').hidden = false;
+
   // Dokładne współrzędne punktu (jeśli wpisane) mają pierwszeństwo przed środkiem widoku z linku mapy.com.
   const view = coordsFromMapUrl(url);
   const exact = Number.isFinite(p.lat) && Number.isFinite(p.lon);
@@ -379,10 +397,6 @@ async function openMapDialog(p) {
     window.open(url, '_blank', 'noopener');
     return;
   }
-  const dlg = $('map-dialog');
-  $('map-title').textContent = p.label;
-  $('map-sub').textContent = [p.typ_punktu, p.height ? `${p.height} m` : null, p.name_mountain_part].filter(Boolean).join(' · ');
-  $('map-open').href = url;
   $('map-status').textContent = 'Wczytywanie mapy…';
   if (!dlg.open) dlg.showModal();
   try {
@@ -416,7 +430,31 @@ async function openMapDialog(p) {
   setTimeout(() => pointMap.invalidateSize(), 200);
 }
 
+function isMapyEmbedLink(url) {
+  try {
+    const u = new URL(url);
+    return /(^|\.)mapy\.(com|cz)$/.test(u.hostname) && u.pathname.startsWith('/s/');
+  } catch {
+    return false;
+  }
+}
+
+// Z wklejonego kodu <iframe> z mapy.com zostaje sam adres (to samo robi serwer).
+function extractMapUrl(value) {
+  const v = value.trim();
+  if (!/<iframe/i.test(v)) return v;
+  const m = v.match(/\ssrc\s*=\s*["']([^"']+)["']/i);
+  return m ? m[1].replace(/&amp;/g, '&').trim() : v;
+}
+
+$('edit-map').addEventListener('change', (e) => { e.target.value = extractMapUrl(e.target.value); });
+
 $('map-close').addEventListener('click', () => $('map-dialog').close());
+// Po zamknięciu okienka zatrzymujemy osadzoną mapę mapy.com (nie mieli w tle).
+$('map-dialog').addEventListener('close', () => {
+  const frame = $('map-frame');
+  if (frame.getAttribute('src')) frame.removeAttribute('src');
+});
 // Dotknięcie przyciemnionego tła zamyka okienko.
 $('map-dialog').addEventListener('click', (e) => {
   const dlg = $('map-dialog');
@@ -877,7 +915,7 @@ function editFormData() {
     type: $('edit-type').value,
     height: $('edit-height').value,
     difficulty: $('edit-difficulty').value,
-    map_url: $('edit-map').value.trim(),
+    map_url: extractMapUrl($('edit-map').value),
     coords: $('edit-coords').value.trim(),
   };
 }

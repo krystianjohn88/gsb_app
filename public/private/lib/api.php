@@ -184,6 +184,13 @@ function coords_field(array $b): array
 function map_url_field(array $b): ?string
 {
     $v = isset($b['map_url']) ? trim((string) $b['map_url']) : '';
+    // Wklejony cały kod osadzenia z mapy.com (<iframe … src="https://mapy.com/s/…">) – bierzemy sam adres.
+    if (stripos($v, '<iframe') !== false) {
+        if (!preg_match('/\ssrc\s*=\s*["\']([^"\']+)["\']/i', $v, $m)) {
+            fail(422, 'Nie znaleziono adresu mapy w kodzie <iframe>.');
+        }
+        $v = trim(html_entity_decode($m[1], ENT_QUOTES, 'UTF-8'));
+    }
     if ($v === '') {
         return null;
     }

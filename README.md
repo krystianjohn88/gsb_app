@@ -75,7 +75,9 @@ minut łączyć nową stronę ze starym skryptem z pamięci podręcznej.
 
 `typ_punktu`: `góra` | `przełęcz` | `schronisko` | `miasto` | `polana` | `inne`; `height` (m n.p.m.) i `map_url`
 (link do punktu na mapy.com – ikonka 🗺️ przy nazwie) są opcjonalne. Ikonka otwiera okienko z mapą OpenStreetMap
-i szlakami (Waymarked Trails, Leaflet z cdnjs), z przyciskiem do mapy.com. Znacznik stoi w `lat`, `lon` (dokładne
+i szlakami (Waymarked Trails, Leaflet z cdnjs), z przyciskiem do mapy.com. Gdy `map_url` to krótki link z „Udostępnij →
+Osadź mapę” (`https://mapy.com/s/…`; w edytorze można wkleić cały kod `<iframe>`), okienko pokazuje osadzoną mapę
+mapy.com z pinezką punktu. Dla zwykłego linku: OpenStreetMap, znacznik w `lat`, `lon` (dokładne
 współrzędne punktu, opcjonalne – w edytorze pole „Współrzędne”, przyjmuje format mapy.com „49.72111N, 18.81561E”);
 bez nich – w środku widoku z linku mapy.com (`x`, `y`), który nie jest dokładnym położeniem punktu.
 Pliki służą do pierwszego importu i do trybu bez bazy – po imporcie punkty edytuje się w aplikacji (baza).
